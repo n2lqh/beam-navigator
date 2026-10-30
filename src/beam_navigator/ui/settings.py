@@ -141,6 +141,16 @@ def _about_panel() -> None:
             ui.label(paragraph)
     ui.label(f"Source code: {about.SOURCE_URL}")
     with ui.row().classes("gap-1"):
+        ui.label("Every screen, with pictures:")
+        ui.link("screen-by-screen walkthrough", about.WALKTHROUGH_URL, new_tab=True).mark(
+            "about-walkthrough"
+        )
+    with ui.row().classes("gap-1"):
+        ui.label("Why I built it:")
+        ui.link("the story behind Beam Navigator", about.STORY_URL, new_tab=True).mark(
+            "about-story"
+        )
+    with ui.row().classes("gap-1"):
         ui.label("Feedback and comments:")
         ui.link(about.CONTACT_EMAIL, f"mailto:{about.CONTACT_EMAIL}").mark("about-email")
     ui.label(about.THIRD_PARTY)

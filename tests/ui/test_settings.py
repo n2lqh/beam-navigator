@@ -510,3 +510,9 @@ async def test_about_shows_copyright_licence_and_source(user: User, desk: Desk) 
     assert isinstance(email, ui.link)
     assert email.text == "beam-navigator@n2lqh.com"
     assert email.props["href"] == "mailto:beam-navigator@n2lqh.com"
+    walkthrough = user.find(marker="about-walkthrough").elements.pop()
+    assert isinstance(walkthrough, ui.link)
+    assert walkthrough.props["href"] == "https://n2lqh.com/beam-navigator-screen-by-screen/"
+    story = user.find(marker="about-story").elements.pop()
+    assert isinstance(story, ui.link)
+    assert story.props["href"] == "https://n2lqh.com/projects/beam-navigator/"

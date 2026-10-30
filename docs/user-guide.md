@@ -1,5 +1,7 @@
 # Beam Navigator User Guide
 
+To see every screen with pictures, read the [screen-by-screen walkthrough](https://n2lqh.com/beam-navigator-screen-by-screen/). For the story of how it came to be, read [North From Where? Building Beam Navigator](https://n2lqh.com/projects/beam-navigator/).
+
 ## Why I wrote Beam Navigator
 
 As a new weak-signal operator, I struggle to follow the nets. Many times the net controller knows the "regulars" and might be a little lax in telling others where they are pointing the beam. In addition, we need to know our bearing from the net controller.
@@ -236,7 +238,7 @@ In Settings → Data:
 
 ## About and licence
 
-Settings → About shows the version, the copyright and the licence. Beam Navigator is free software under the GNU General Public License, version 3 or later, and comes with no warranty. The source code is at https://github.com/n2lqh/beam-navigator. The libraries it is built on are listed, with their own licences, in `THIRD_PARTY_NOTICES.txt`, published with each release.
+Settings → About shows the version, the copyright, the licence, and links to the screen-by-screen walkthrough and the story behind Beam Navigator. Beam Navigator is free software under the GNU General Public License, version 3 or later, and comes with no warranty. The source code is at https://github.com/n2lqh/beam-navigator. The libraries it is built on are listed, with their own licences, in `THIRD_PARTY_NOTICES.txt`, published with each release.
 
 ## Troubleshooting
 

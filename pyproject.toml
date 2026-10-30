@@ -1,6 +1,6 @@
 [project]
 name = "beam-navigator"
-version = "1.0.1"
+version = "1.0.2"
 description = "Tells a directional-antenna operator which way to point, and points the rotator when asked."
 requires-python = ">=3.12"
 license = "GPL-3.0-or-later"

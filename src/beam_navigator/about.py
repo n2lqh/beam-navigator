@@ -9,6 +9,8 @@ COPYRIGHT = f"Copyright © 2026 {HOLDER}"
 LICENSE_ID = "GPL-3.0-or-later"
 SOURCE_URL = "https://github.com/n2lqh/beam-navigator"
 CONTACT_EMAIL = "beam-navigator@n2lqh.com"
+WALKTHROUGH_URL = "https://n2lqh.com/beam-navigator-screen-by-screen/"
+STORY_URL = "https://n2lqh.com/projects/beam-navigator/"
 TITLE = f"{PRODUCT} {__version__}"
 
 LICENSE_NOTICE = [
