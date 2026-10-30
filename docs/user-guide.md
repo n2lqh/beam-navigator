@@ -234,6 +234,10 @@ In Settings → Data:
 - **Restore from a backup (.db)** checks the file first. If it isn't a Beam Navigator backup, is damaged, or comes from a newer version, it says so and nothing changes. Otherwise it asks you to confirm. Your current data is saved first in the `backups` folder inside your data folder, then the backup replaces it.
 - **After a restore, every rotator is in simulation.** Run Test connection and switch Live back on. Reload any other open Beam Navigator pages.
 
+## About and licence
+
+Settings → About shows the version, the copyright and the licence. Beam Navigator is free software under the GNU General Public License, version 3 or later, and comes with no warranty. The source code is at https://github.com/n2lqh/beam-navigator. The libraries it is built on are listed, with their own licences, in `THIRD_PARTY_NOTICES.txt`, published with each release.
+
 ## Troubleshooting
 
 - **"Port 8080 is already in use…"** Beam Navigator is probably already running: open http://127.0.0.1:8080. To run a second copy, or if another program uses port 8080, start it with `--port` and another number (on Windows, from a Command Prompt: `BeamNavigator.exe --port 8090`).

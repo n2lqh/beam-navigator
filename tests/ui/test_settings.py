@@ -11,6 +11,7 @@ import pytest
 from nicegui import ui
 from nicegui.testing import User
 
+from beam_navigator import __version__
 from beam_navigator.core.models import OperatorProfile, RotatorProfile, Station
 from beam_navigator.desk import Desk
 from beam_navigator.rotators.base import Capabilities, CommandResult, ConnectionResult
@@ -494,3 +495,18 @@ async def test_restore_redraws_the_page(user: User, file_desk: Desk) -> None:
     redrawn = element(user, f"live-{profile.id}")
     assert isinstance(redrawn, ui.switch) and not redrawn.value
     await user.should_see(SIMULATION_LABEL)
+
+
+# About: copyright and licence (decision 41) ----------------------------------------------
+
+
+async def test_about_shows_copyright_licence_and_source(user: User, desk: Desk) -> None:
+    await open_tab(user, desk, "About")
+    await user.should_see(f"Beam Navigator {__version__}")
+    await user.should_see("Copyright © 2026 Terry Rossi, N2LQH")
+    await user.should_see("WITHOUT ANY WARRANTY", marker="about-licence")
+    await user.should_see("https://github.com/n2lqh/beam-navigator")
+    email = user.find(marker="about-email").elements.pop()
+    assert isinstance(email, ui.link)
+    assert email.text == "beam-navigator@n2lqh.com"
+    assert email.props["href"] == "mailto:beam-navigator@n2lqh.com"

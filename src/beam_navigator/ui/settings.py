@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from nicegui import events, run, ui
 
+from beam_navigator import about
 from beam_navigator.backup import BackupError, checked_backup
 from beam_navigator.core.keymap import ACTIONS, Chord, label
 from beam_navigator.core.models import LatLon, OperatorProfile, RotatorProfile
@@ -109,8 +110,9 @@ def settings_page(
             qrz_tab = ui.tab("QRZ")
             keys_tab = ui.tab("Keys")
             data_tab = ui.tab("Data")
+            about_tab = ui.tab("About")
         by_label = {t.props["label"]: t for t in (station_tab, bands_tab, aliases_tab,
-                    rotators_tab, qrz_tab, keys_tab, data_tab)}  # fmt: skip
+                    rotators_tab, qrz_tab, keys_tab, data_tab, about_tab)}  # fmt: skip
         first = data_tab if restored is not None else by_label.get(tab or "", station_tab)
         with ui.tab_panels(tabs, value=first).classes("w-full"):
             with ui.tab_panel(station_tab):
@@ -127,6 +129,21 @@ def settings_page(
                 _keys_panel(desk)
             with ui.tab_panel(data_tab):
                 _data_panel(desk)
+            with ui.tab_panel(about_tab):
+                _about_panel()
+
+
+def _about_panel() -> None:
+    ui.label(about.TITLE).classes("text-h6")
+    ui.label(about.COPYRIGHT)
+    with ui.column().mark("about-licence"):
+        for paragraph in about.LICENSE_NOTICE:
+            ui.label(paragraph)
+    ui.label(f"Source code: {about.SOURCE_URL}")
+    with ui.row().classes("gap-1"):
+        ui.label("Feedback and comments:")
+        ui.link(about.CONTACT_EMAIL, f"mailto:{about.CONTACT_EMAIL}").mark("about-email")
+    ui.label(about.THIRD_PARTY)
 
 
 MAX_BACKUP_BYTES = 50 * 1024 * 1024
