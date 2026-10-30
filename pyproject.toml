@@ -1,0 +1,48 @@
+[project]
+name = "beam-navigator"
+version = "0.0.1"
+description = "Tells a directional-antenna operator which way to point, and points the rotator when asked."
+requires-python = ">=3.12"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+dependencies = [
+    "keyring>=25.7.0",
+    "nicegui>=3.18.0",
+    "platformdirs>=4.13.6",
+    "tzdata>=2026.6",
+]
+
+[project.scripts]
+beamnav = "beam_navigator.cli:main"
+beamnav-rotor = "beam_navigator.cli:rotor_main"
+beamnav-ui = "beam_navigator.ui.app:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "ruff>=0.6",
+  "mypy>=1.11",
+  "geographiclib>=2",
+  "pytest-asyncio>=1.4.1",
+  "pyinstaller>=6.22.3",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+main_file = ""
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.mypy]
+strict = true

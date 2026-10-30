@@ -1,0 +1,4 @@
+# Roster fixtures must stay byte-for-byte as pasted (requirements section 7)
+tests/fixtures/** -text
+# The example rosters packaged from those fixtures must stay identical to them (decision 32)
+src/beam_navigator/data/example_rosters/** -text
