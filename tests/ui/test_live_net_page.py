@@ -419,3 +419,41 @@ async def test_closed_session_read_only_rotate_works(
     await user.should_not_see(marker="closed-badge")
     assert entry(user, "callsign").enabled
     assert NetRepository(conn).get_session(w2kv).status == "active"
+
+
+async def test_aim_unresolved_clears_typed_target(
+    user: User, desk: Desk, w2kv: int, sim: SimulationAdapter
+) -> None:  # final review I1: never rotate to an earlier typed target
+    await open_net(user, desk, w2kv)
+    user.find(marker="aim").type("FN20").trigger("keydown.enter")
+    await user.should_see("Rotate VHF to 342")
+    [box] = user.find(marker="aim").elements
+    box.set_value("K9ZZZ")
+    user.find(marker="aim").trigger("keydown.enter")
+    await user.should_not_see("Rotate VHF to 342")  # wait for the redraw
+    [rotate] = user.find(marker="rotate").elements
+    assert not rotate.enabled
+    assert sim.commands == []
+
+
+async def test_heard_on_selected_regular_keeps_target(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:  # final review M2, regraded: select, Heard, then Rotate still points there
+    tonight = tonight_after(conn, w2kv)
+    await open_net(user, desk, tonight)
+    user.find(marker="regular-W2KV").click()
+    user.find(marker="heard-regular-W2KV").click()
+    await user.should_not_see(marker="regular-W2KV")  # wait for the redraw
+    await user.should_see("Rotate VHF to 354")
+    user.find(marker="rotate").click()
+    await user.should_see("Simulated:")
+    assert len(sim.commands) == 1
+
+
+async def test_heard_base_call_duplicate_says_so(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int
+) -> None:  # final review I2: no crash when the regular is already here as CALL/M
+    tonight = tonight_after(conn, w2kv)
+    NetRepository(conn).add_checkin(tonight, "W2KV/M")
+    await open_net(user, desk, tonight)
+    await user.should_not_see(marker="regular-W2KV")

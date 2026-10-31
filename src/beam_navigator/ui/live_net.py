@@ -22,6 +22,7 @@ from beam_navigator.live_net import (
 from beam_navigator.net_control import Entry, NetControl
 from beam_navigator.qrz_client import QrzClient
 from beam_navigator.rotators.service import RotateOutcome
+from beam_navigator.store.repositories import DuplicateCheckIn
 from beam_navigator.ui.entry_line import EntryLine
 
 COMPASS_LAYOUT = [["NW", "N", "NE"], ["W", "", "E"], ["SW", "S", "SE"]]
@@ -158,6 +159,10 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
         if target is not None:
             state.typed = target
             follow("typed")
+        elif state.typed is not None:
+            # Never leave Rotate on an earlier typed target while showing this one.
+            state.typed = None
+            controls.refresh()
 
     def add_aimed_tonight() -> None:
         """Puts the typed call on the I-hear line; logging it is still the operator's Enter."""
@@ -171,12 +176,22 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                        None)  # fmt: skip
         grid = found.grid or (regular.grid_text if regular and is_grid(regular.grid_text) else "")
         try:
-            control.log_heard(session_id, Entry(callsign, name=found.name or "", grid=grid or ""))
+            logged = control.log_heard(
+                session_id, Entry(callsign, name=found.name or "", grid=grid or "")
+            )
+        except DuplicateCheckIn as exc:
+            ui.notify(control.duplicate_text(session_id, exc.existing), type="warning")
+            lists.refresh()
+            return
         except ValueError as exc:
             _error(exc)
             return
         ui.notify(f"Logged {callsign}")
-        lists.refresh()
+        if state.mode == "regular" and state.callsign == callsign:
+            state.selected = logged.id  # keep Rotate on them, now in tonight's list
+            follow("station")
+        else:
+            lists.refresh()
 
     def change_rotator(value: int | None) -> None:
         if value != state.rotator_id:

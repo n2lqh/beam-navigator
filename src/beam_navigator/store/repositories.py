@@ -395,12 +395,13 @@ class NetRepository:
         return self.get_session(session_id)
 
     def last_closing_notes(self, net_id: int, before_session_id: int) -> tuple[str, str] | None:
-        """The date and notes of this net's most recently closed other session. Empty
-        notes there mean nothing to show, never an older session's notes."""
+        """The date and notes of this net's latest closed session before this one (by date,
+        then id). Empty notes there mean nothing to show, never an older session's notes."""
+        this = self.get_session(before_session_id)
         row = self._conn.execute(
-            "SELECT date, closing_notes FROM session WHERE net_id = ? AND id != ?"
-            " AND status = 'closed' ORDER BY closed_at DESC, id DESC LIMIT 1",
-            (net_id, before_session_id),
+            "SELECT date, closing_notes FROM session WHERE net_id = ? AND status = 'closed'"
+            " AND (date < ? OR (date = ? AND id < ?)) ORDER BY date DESC, id DESC LIMIT 1",
+            (net_id, this.date, this.date, this.id),
         ).fetchone()
         if row is None or not row["closing_notes"]:
             return None
@@ -729,8 +730,9 @@ class NetRepository:
         """Known participants of this net who have not checked in to this session.
         They are shown as expected, never as checked in (spec 4.6)."""
         session = self.get_session(session_id)
-        present = {c.callsign for c in self.checkins(session_id)}
-        return [p for p in self.participants(session.net_id) if p.callsign not in present]
+        # By base call, as the duplicate check does: W1ABC/M tonight means W1ABC is here.
+        present = {_base(c.callsign) for c in self.checkins(session_id)}
+        return [p for p in self.participants(session.net_id) if _base(p.callsign) not in present]
 
 
 class RotatorNotTested(Exception):

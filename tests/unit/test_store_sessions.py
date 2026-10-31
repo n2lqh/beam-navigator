@@ -91,3 +91,16 @@ def test_start_session_rejects_bad_date(nets: NetRepository) -> None:
     net_id = two_metre_net(nets)
     with pytest.raises(ValueError):
         nets.start_session(net_id, "Monday")
+
+
+def test_expected_matches_base_callsign() -> None:
+    # final review I2: W1ABC/M tonight means W1ABC is not "not heard yet"
+    conn = open_db(":memory:")
+    nets = NetRepository(conn)
+    net = nets.save_net(Net(None, "N", None, None, None, None, None, None, None, None, None,
+                            False))  # fmt: skip
+    assert net.id is not None
+    nets.add_checkin(nets.start_session(net.id, "2026-10-26").id, "W1ABC")
+    tonight = nets.start_session(net.id, "2026-11-02").id
+    nets.add_checkin(tonight, "W1ABC/M")
+    assert [p.callsign for p in nets.expected(tonight)] == []

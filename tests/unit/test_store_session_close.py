@@ -89,3 +89,18 @@ def test_last_closing_notes_skips_this_session(conn: sqlite3.Connection) -> None
     session = nets.start_session(net_id, "2026-10-26")
     nets.close_session(session.id, "mine")
     assert nets.last_closing_notes(net_id, session.id) is None
+
+
+def test_last_closing_notes_only_from_earlier_sessions(conn: sqlite3.Connection) -> None:
+    # final review I3: opening an older session must not show a newer one's notes
+    nets = NetRepository(conn)
+    net_id = add_net(conn)
+    old = nets.start_session(net_id, "2026-10-19")
+    nets.close_session(old.id, "old")
+    new = nets.start_session(net_id, "2026-10-26")
+    nets.close_session(new.id, "new")
+    assert nets.last_closing_notes(net_id, old.id) is None
+    nets.reopen_session(old.id)
+    nets.close_session(old.id, "old again")  # re-closing an old session later
+    tonight = nets.start_session(net_id, "2026-11-02")
+    assert nets.last_closing_notes(net_id, tonight.id) == ("2026-10-26", "new")
