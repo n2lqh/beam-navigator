@@ -428,3 +428,16 @@ async def test_examples_qrz_stops_once_offline(user: User, desk: Desk, book: Net
     user.find(marker="add-examples").click()
     await user.should_see("QRZ can't be reached. Everything else works offline.")
     assert transport.calls == 1
+
+
+async def test_net_page_shows_closing_notes_first_line(
+    user: User, desk: Desk, book: NetBook, conn: sqlite3.Connection
+) -> None:
+    net = book.save(form(controller_call="W2KV", controller_grid="FN20ok"))
+    assert net.id is not None
+    session_id = import_w2kv(conn, net.id)
+    NetRepository(conn).close_session(session_id, "K3WGR weak from 40°\nsecond line")
+    register_pages(lambda: desk)
+    await user.open(f"/nets/{net.id}")
+    await user.should_see("K3WGR weak from 40°")
+    await user.should_not_see("second line")

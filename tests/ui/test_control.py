@@ -564,3 +564,18 @@ async def test_control_closed_session_refuses_log(
     enter_twice(user)
     await user.should_see("This session is closed")
     assert NetRepository(conn).checkins(tonight) == []
+
+
+async def test_control_shows_last_time_and_locks_when_closed(
+    user: User, desk: Desk, tonight: int, conn: sqlite3.Connection
+) -> None:  # acceptance 44 (net control half), 45
+    nets = NetRepository(conn)
+    earlier = next(s for s, _ in nets.sessions(nets.get_session(tonight).net_id)
+                   if s.id != tonight)  # fmt: skip
+    nets.close_session(earlier.id, "try 30° for K3WGR")
+    await open_control(user, desk, tonight)
+    await user.should_see("Last time (2026-10-26)")
+    assert field(user, "callsign").enabled
+    nets.close_session(tonight, "")
+    await open_control(user, desk, tonight)
+    assert not field(user, "callsign").enabled

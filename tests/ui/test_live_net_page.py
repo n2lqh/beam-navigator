@@ -384,3 +384,38 @@ async def test_add_tonight_fills_i_hear(
     user.find(marker="add-tonight").click()
     assert entry(user, "callsign").value == "W2KV"
     assert NetRepository(conn).checkins(tonight) == []
+
+
+async def test_close_with_notes_then_next_session_shows_them(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, w2kv_net: int
+) -> None:  # acceptance 44
+    await open_net(user, desk, w2kv)
+    user.find(marker="close-session").click()
+    user.find(marker="close-notes").type("try 30° for K3WGR")
+    user.find(marker="close-confirm").click()
+    session = NetRepository(conn).get_session(w2kv)
+    assert session.status == "closed" and session.closing_notes == "try 30° for K3WGR"
+    await user.open(f"/net/{tonight_after(conn, w2kv)}")
+    await user.should_see("try 30° for K3WGR")
+    other = NetRepository(conn).start_session(add_net(conn, "Other", "2 m"), "2026-11-02").id
+    await user.open(f"/net/{other}")
+    await user.should_not_see("try 30° for K3WGR")
+
+
+async def test_closed_session_read_only_rotate_works(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:  # acceptance 45
+    NetRepository(conn).close_session(w2kv, "")
+    await open_net(user, desk, w2kv)
+    await user.should_see(marker="closed-badge")
+    assert not entry(user, "callsign").enabled
+    first = NetRepository(conn).checkins(w2kv)[0]
+    [heard] = user.find(marker=f"heard-{first.id}").elements
+    assert not heard.enabled
+    user.find(marker="rotate").click()
+    await user.should_see("Simulated:")
+    assert len(sim.commands) == 1
+    user.find(marker="reopen").click()
+    await user.should_not_see(marker="closed-badge")
+    assert entry(user, "callsign").enabled
+    assert NetRepository(conn).get_session(w2kv).status == "active"

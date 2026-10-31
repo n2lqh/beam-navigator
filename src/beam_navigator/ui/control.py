@@ -62,10 +62,20 @@ def control_page(control: NetControl, session_id: int, qrz: QrzClient | None = N
     net = control.nets.get_net(session.net_id)
     with ui.column().classes("w-full max-w-6xl mx-auto gap-3 p-4"):
         ui.label(f"Net control · {net.name} · {session.date}").classes("text-xl font-bold")
+        last_time = control.nets.last_closing_notes(session.net_id, session_id)
+        if last_time is not None:
+            with ui.card().classes("w-full bg-amber-1").mark("last-time"):
+                ui.label(f"Last time ({last_time[0]})").classes("font-bold")
+                ui.label(last_time[1]).classes("whitespace-pre-line")
+        if session.status == "closed":
+            ui.label("This session is closed. Reopen it on the live net screen to log.").classes(
+                "text-warning"
+            )
         with ui.row().classes("w-full items-start gap-6"):  # narrow window: info drops below
             with ui.column().classes("grow gap-2"):
                 line.fields()
                 line.inputs["callsign"].props("autofocus")
+                line.set_enabled(session.status != "closed")
 
             @ui.refreshable
             def info() -> None:

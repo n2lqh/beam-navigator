@@ -218,3 +218,11 @@ def test_no_bearings_without_any_known_origin(conn: sqlite3.Connection) -> None:
     NetControl(conn, desk).log(session.id, Entry("K3WGR", grid="FN10xi"))
     text = run(conn, desk, session.id, "text")
     assert "No bearings: net control's location is unknown." in text and "°" not in text
+
+
+def test_closing_notes_never_exported(
+    conn: sqlite3.Connection, desk: Desk, session_id: int
+) -> None:  # acceptance 46: the operator's notes for next time are private
+    NetRepository(conn).close_session(session_id, "SECRET-NOTE for next week")
+    for fmt in ("text", "csv", "json"):
+        assert "SECRET-NOTE" not in export_session(conn, desk, session_id, fmt)  # type: ignore[arg-type]

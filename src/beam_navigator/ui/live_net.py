@@ -227,6 +227,22 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
         lists.refresh()
         controls.refresh()
 
+    def close_session() -> None:
+        """Close my session: notes for next time; the session turns read-only."""
+        try:
+            session = live.nets.close_session(session_id, close_notes.value or "")
+        except ValueError as exc:
+            _error(exc)
+            return
+        close_dialog.close()
+        ui.navigate.to(f"/nets/{session.net_id}")
+
+    def reopen() -> None:
+        live.nets.reopen_session(session_id)
+        i_hear.set_enabled(True)
+        header.refresh()
+        lists.refresh()
+
     sub_dialog = _substitute_dialog(live, session_id, everything)
     relay_target: dict[str, int | None] = {"id": None}
 
@@ -245,6 +261,16 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
     def cancel_relay() -> None:
         relay_dialog.close()
         lists.refresh()  # puts the row's select back to its saved state
+
+    with ui.dialog() as close_dialog, ui.card():
+        ui.label("Close my session").classes("text-lg")
+        close_notes = ui.textarea("Notes for next time").classes("w-96").mark("close-notes")
+        ui.label("Shown at the next session of this net. Never exported.").classes(
+            "text-caption"
+        )
+        with ui.row():
+            ui.button("Close", on_click=close_session).mark("close-confirm")
+            ui.button("Cancel", on_click=close_dialog.close).props("flat")
 
     with ui.dialog() as relay_dialog, ui.card():
         ui.label("Relayed by").classes("text-lg")
@@ -272,9 +298,20 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                 ui.label(view.controller.you_to_controller or "You → controller: unknown")
                 ui.label(view.controller.controller_to_you or "Controller → you: unknown")
                 ui.label(f"Location: {view.controller.source}").classes("text-caption")
-            ui.button("Substitute controller tonight", on_click=sub_dialog.open).props(
-                "flat no-refocus"
-            ).mark("substitute").on("click", js_handler=BLUR)
+            with ui.row().classes("items-center gap-2"):
+                ui.button("Substitute controller tonight", on_click=sub_dialog.open).props(
+                    "flat no-refocus"
+                ).mark("substitute").on("click", js_handler=BLUR)
+                if view.closed:
+                    # Read-only, but pointing still works: it records nothing.
+                    ui.badge("Closed", color="grey").mark("closed-badge")
+                    ui.button("Reopen", on_click=reopen).props("flat").mark("reopen").on(
+                        "click", js_handler=BLUR
+                    )
+                else:
+                    ui.button("Close my session…", on_click=close_dialog.open).props(
+                        "flat"
+                    ).mark("close-session").on("click", js_handler=BLUR)
 
         header()
 
@@ -389,7 +426,9 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                     ui.select(
                         HEARD_OPTIONS, value=row.heard or "",
                         on_change=lambda e, c=row.checkin_id: set_heard(c, e.value),
-                    ).classes("w-28").mark(f"heard-{row.checkin_id}")  # fmt: skip
+                    ).classes("w-28").mark(f"heard-{row.checkin_id}").set_enabled(
+                        not view.closed
+                    )  # fmt: skip
                     if row.heard == "relay":
                         ui.label(f"via {row.relay_call}")
 
@@ -421,13 +460,14 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                     ui.label(regular.distance_text or "").classes("w-20")
                     ui.label(regular.attendance_text).classes("w-24 text-grey")
                     ui.label(f"Last: {regular.last_seen}").classes("w-32 text-grey")
-                    ui.button(
+                    heard = ui.button(
                         "Heard", on_click=lambda c=regular.callsign: heard_regular(c)
-                    ).props("flat dense").mark(f"heard-regular-{regular.callsign}").on(
-                        "click", js_handler=BLUR
-                    )  # fmt: skip
+                    ).props("flat dense").mark(f"heard-regular-{regular.callsign}")
+                    heard.on("click", js_handler=BLUR)
+                    heard.set_enabled(not view.closed)
 
         lists()
+        i_hear.set_enabled(not first.closed)
 
 
 def _substitute_dialog(

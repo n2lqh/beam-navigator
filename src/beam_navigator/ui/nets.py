@@ -13,7 +13,7 @@ from beam_navigator.beamnet import (
     import_beamnet,
     write_beamnet,
 )
-from beam_navigator.core.models import Net, RotatorProfile
+from beam_navigator.core.models import Net, RotatorProfile, Session
 from beam_navigator.core.schedule import WEEKDAYS
 from beam_navigator.nets import NetBook, NetForm
 from beam_navigator.qrz_client import NO_LOGIN, NOT_FOUND, QrzClient, QrzError
@@ -115,6 +115,14 @@ def net_form_dialog(
         dialog.open()
 
     return open_form
+
+
+def _session_text(session: Session, count: int) -> str:
+    """Date, status, count and the first line of the closing notes, if any."""
+    parts = [session.date, session.status, f"{count} check-ins"]
+    if session.closing_notes:
+        parts.append(session.closing_notes.splitlines()[0])
+    return " · ".join(parts)
 
 
 def _start_controls(book: NetBook, net_id: int) -> None:
@@ -261,7 +269,7 @@ def nets_page(
                 ).classes("text-grey-8")
                 for session, count in book.nets.sessions(net_id):
                     with ui.row().classes("items-center gap-4"):
-                        ui.label(f"{session.date} · {session.status} · {count} check-ins")
+                        ui.label(_session_text(session, count))
                         ui.link("Open", f"/net/{session.id}")
                         ui.link("Net control", f"/control/{session.id}")
                 _start_controls(book, net_id)
@@ -349,7 +357,7 @@ def net_page(
             ui.label("No sessions yet.").classes("text-grey-7")
         for session, count in view.sessions:
             with ui.row().classes("items-center gap-4"):
-                ui.label(f"{session.date} · {session.status} · {count} check-ins")
+                ui.label(_session_text(session, count))
                 ui.link("Open", f"/net/{session.id}").mark(f"open-{session.id}")
                 ui.link("Net control", f"/control/{session.id}").mark(f"control-{session.id}")
 
