@@ -129,7 +129,7 @@ async def test_new_session_shows_expected(
     assert isinstance(when, ui.input)
     when.set_value("2026-11-02")
     user.find(marker=f"start-{w2kv_net}").click()
-    await user.should_see("Expected (17)")
+    await user.should_see("Regulars not heard yet (17)")
     sessions = NetRepository(conn).sessions(w2kv_net)
     assert [(s.date, count) for s, count in sessions][0] == ("2026-11-02", 0)
 
@@ -239,8 +239,76 @@ async def test_heard_select_click_does_not_reach_the_row(
 async def test_controls_give_focus_back_to_hotkeys(user: User, desk: Desk, w2kv: int) -> None:
     # final review I4: after clicking these, Home and Ctrl+Enter must still work
     await open_net(user, desk, w2kv)
-    for marker in ("mode", "substitute", "rotator", "sort"):
+    for marker in ("mode", "substitute", "rotator", "tonight-sort", "regular-sort"):
         [element] = user.find(marker=marker).elements
         assert has_js_listener(element, "click", "blur") or has_js_listener(
             element, "update:model-value", "blur"
         ), marker
+
+
+# Participant screen (owner, 2026-10-30) ---------------------------------------------------
+
+
+def tonight_after(conn: sqlite3.Connection, session_id: int) -> int:
+    nets = NetRepository(conn)
+    return nets.start_session(nets.get_session(session_id).net_id, "2026-11-02").id
+
+
+async def test_aim_enter_sends_nothing(
+    user: User, desk: Desk, w2kv: int, sim: SimulationAdapter
+) -> None:  # acceptance 37
+    await open_net(user, desk, w2kv)
+    user.find(marker="aim").type("FN20").trigger("keydown.enter")
+    await user.should_see("Rotate VHF to 342")
+    await user.should_see("FN20 — typed")
+    assert sim.commands == []
+
+
+async def test_aim_unknown_says_why(user: User, desk: Desk, w2kv: int) -> None:
+    await open_net(user, desk, w2kv)
+    user.find(marker="aim").type("K3").trigger("keydown.enter")
+    await user.should_see("Not recognized")
+
+
+async def test_aim_filters_both_lists(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:  # acceptance 41
+    tonight = tonight_after(conn, w2kv)
+    regulars = [c.callsign for c in NetRepository(conn).checkins(w2kv)]
+    NetRepository(conn).add_checkin(tonight, regulars[0])
+    await open_net(user, desk, tonight)
+    await user.should_see(marker=f"regular-{regulars[1]}")
+    user.find(marker="aim").type(regulars[1])
+    await user.should_see(marker=f"regular-{regulars[1]}")
+    await user.should_not_see(marker=f"regular-{regulars[2]}")
+    await user.should_not_see(regulars[0])
+    assert sim.commands == []
+
+
+async def test_regular_click_sends_nothing_then_rotate_once(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:  # acceptance 39
+    tonight = tonight_after(conn, w2kv)
+    await open_net(user, desk, tonight)
+    await user.should_see("Regulars not heard yet")
+    user.find(marker="regular-W2KV").click()
+    await user.should_see("(W2KV)")
+    assert sim.commands == []
+    user.find(marker="rotate").click()
+    await user.should_see("Simulated:")
+    assert len(sim.commands) == 1
+
+
+async def test_last_time_card(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int
+) -> None:  # acceptance 44 (screen)
+    nets = NetRepository(conn)
+    nets.close_session(w2kv, "try 30° for K3WGR")
+    await open_net(user, desk, tonight_after(conn, w2kv))
+    await user.should_see("Last time (2026-10-26)")
+    await user.should_see("try 30° for K3WGR")
+
+
+async def test_no_last_time_card_without_notes(user: User, desk: Desk, w2kv: int) -> None:
+    await open_net(user, desk, w2kv)
+    await user.should_not_see(marker="last-time")

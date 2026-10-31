@@ -12,7 +12,6 @@ from nicegui import app, ui
 from platformdirs import user_data_dir
 
 from beam_navigator.desk import Desk
-from beam_navigator.live_net import LiveNet
 from beam_navigator.net_control import NetControl
 from beam_navigator.nets import NetBook
 from beam_navigator.qrz_client import QrzClient
@@ -129,7 +128,7 @@ def register_pages(
         except ValueError as exc:
             ui.label(str(exc))
             return
-        live_net_page(LiveNet(desk.conn, desk), session_id)
+        live_net_page(NetControl(desk.conn, desk), session_id, qrz)
 
     @ui.page("/control/{session_id}")
     def net_control(session_id: int) -> None:
