@@ -166,6 +166,8 @@ class EntryLine:
             self.message.set_text("")
             self.refresh_suggestions()
             self.on_callsign()
+        elif name == "grid":
+            self.on_callsign()
         self.restyle()
 
     def clear(self) -> None:

@@ -9,11 +9,12 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
+from beam_navigator.core.callsign import normalize_callsign
 from beam_navigator.core.geometry import short_path
 from beam_navigator.core.maidenhead import grid_center, is_grid
 from beam_navigator.core.models import LatLon, RotatorProfile, Session
 from beam_navigator.core.sector import SectorCheck, check_sector, sector_name
-from beam_navigator.desk import Desk, LookupView
+from beam_navigator.desk import Bearing, Desk, LookupView
 from beam_navigator.rotators.service import RotateOutcome
 from beam_navigator.store.repositories import NetRepository, StationRepository
 
@@ -151,6 +152,15 @@ class LiveNet:
             return view, None
         label = view.title.split(" — ", 1)[0] if view.title else text.strip()
         return view, (label, view.bearing_deg)
+
+    def heard_aim(self, callsign: str, grid: str) -> tuple[str, Bearing] | None:
+        """The I-hear line's direction: the grid typed there, else the saved record's.
+        Records nothing and sends nothing; None when there is no call or no location."""
+        call = normalize_callsign(callsign) if callsign.strip() else ""
+        if not call:
+            return None
+        found = self.desk.bearing_to(self._grid(call, grid.strip())[0])
+        return None if found is None else (call, found)
 
     def announce(self, session_id: int, sector: str) -> SectorCheck:
         """Records nothing and moves nothing: it only answers "is this call for me?"."""

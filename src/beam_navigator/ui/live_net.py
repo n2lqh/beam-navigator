@@ -9,6 +9,7 @@ from nicegui import events, ui
 
 from beam_navigator.core.callsign import is_callsign, normalize_callsign
 from beam_navigator.core.maidenhead import is_grid
+from beam_navigator.desk import Bearing
 from beam_navigator.hotkeys import action_for
 from beam_navigator.live_net import (
     LiveNet,
@@ -163,6 +164,12 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
             # Never leave Rotate on an earlier typed target while showing this one.
             state.typed = None
             controls.refresh()
+
+    def aim_heard(found: tuple[str, Bearing] | None) -> None:
+        """Aim on the I-hear line: that station becomes the typed target. Never rotates."""
+        if found is not None:
+            state.typed = (found[0], found[1].deg)
+            follow("typed")
 
     def add_aimed_tonight() -> None:
         """Puts the typed call on the I-hear line; logging it is still the operator's Enter."""
@@ -398,8 +405,8 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
 
         # Stations the operator hears, logged as on the net control screen (owner, 2026-10-30).
         i_hear = EntryLine(
-            control, session_id, fields=("callsign", "name", "grid"), qrz=qrz,
-            on_logged=lambda: lists.refresh(), heard=True,
+            control, session_id, qrz=qrz,
+            on_logged=lambda: lists.refresh(), heard=True, on_callsign=lambda: heard_aim.refresh(),
         )  # fmt: skip
         ui.label("I hear").classes("text-lg mt-2")
         with ui.row().classes("items-start gap-4"):
@@ -407,6 +414,23 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                 i_hear.fields()
             if qrz is not None:
                 i_hear.qrz_button()
+
+            @ui.refreshable
+            def heard_aim() -> None:
+                """Direction to the station on the line, and Aim: sets the target, never rotates."""
+                found = live.heard_aim(i_hear.callsign, i_hear.entry().grid)
+                with ui.row().classes("items-center gap-2 mt-2"):
+                    ui.label(
+                        "Direction: —" if found is None
+                        else f"Direction: {found[1].text} · {found[1].distance_text}"
+                    ).mark("i-hear-direction")  # fmt: skip
+                    button = ui.button("Aim", on_click=lambda: aim_heard(found)).props(
+                        "flat"
+                    ).mark("i-hear-aim")  # fmt: skip
+                    button.on("click", js_handler=BLUR)
+                    button.set_enabled(found is not None)
+
+            heard_aim()
 
         @ui.refreshable
         def lists() -> None:

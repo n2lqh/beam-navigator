@@ -316,3 +316,17 @@ def test_view_last_time_and_closed(conn: sqlite3.Connection, live: LiveNet, w2kv
     tonight = tonight_after(conn, w2kv)
     assert live.view(tonight).last_time == ("2026-10-26", "try 30°")
     assert live.view(w2kv).closed is True
+
+
+def test_heard_aim_uses_typed_grid_else_record(
+    conn: sqlite3.Connection, live: LiveNet, desk: Desk, sim: SimulationAdapter
+) -> None:  # owner, 2026-10-31: direction and Aim on the I-hear line
+    found = live.heard_aim("K9ZZZ", "FN20")
+    expected = desk.bearing_to("FN20")
+    assert found is not None and expected is not None
+    assert found == ("K9ZZZ", expected)
+    StationRepository(conn).save(Station("K2XYZ", None, "FN20ok", None, None, "saved", ""))
+    assert live.heard_aim("k2xyz", "") == ("K2XYZ", desk.bearing_to("FN20ok"))
+    assert live.heard_aim("K9ZZZ", "") is None  # no grid anywhere: nothing to aim at
+    assert live.heard_aim("", "FN20") is None
+    assert sim.commands == []

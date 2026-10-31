@@ -342,12 +342,11 @@ async def test_i_hear_logs_and_moves_regular(
     assert sim.commands == []
 
 
-async def test_i_hear_has_three_fields(user: User, desk: Desk, w2kv: int) -> None:
+async def test_i_hear_has_net_control_fields(user: User, desk: Desk, w2kv: int) -> None:
+    # owner, 2026-10-31: the same boxes as the net control screen
     await open_net(user, desk, w2kv)
-    for name in ("callsign", "name", "grid"):
+    for name in ("callsign", "name", "grid", "qth", "report", "notes"):
         await user.should_see(marker=f"entry-{name}")
-    for name in ("qth", "report", "notes"):
-        await user.should_not_see(marker=f"entry-{name}")
 
 
 async def test_i_hear_duplicate_asks(
@@ -457,3 +456,21 @@ async def test_heard_base_call_duplicate_says_so(
     NetRepository(conn).add_checkin(tonight, "W2KV/M")
     await open_net(user, desk, tonight)
     await user.should_not_see(marker="regular-W2KV")
+
+
+async def test_i_hear_shows_direction_and_aims_without_rotating(
+    user: User, desk: Desk, w2kv: int, sim: SimulationAdapter
+) -> None:  # owner, 2026-10-31
+    await open_net(user, desk, w2kv)
+    [aim] = user.find(marker="i-hear-aim").elements
+    assert not aim.enabled
+    user.find(marker="entry-callsign").type("K9ZZZ")
+    user.find(marker="entry-grid").type("FN20")
+    await user.should_see("342")
+    user.find(marker="i-hear-aim").click()
+    await user.should_see("Rotate VHF to 342")
+    await user.should_see("(K9ZZZ)")
+    assert sim.commands == []
+    user.find(marker="rotate").click()
+    await user.should_see("Simulated:")
+    assert len(sim.commands) == 1
