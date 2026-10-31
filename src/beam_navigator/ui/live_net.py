@@ -280,12 +280,11 @@ def live_net_page(live: LiveNet, session_id: int) -> None:
                     ).classes("w-28").mark(f"heard-{row.checkin_id}")  # fmt: skip
                     if row.heard == "relay":
                         ui.label(f"via {row.relay_call}")
-            if view.expected:
-                ui.label(f"Expected ({len(view.expected)})").classes("text-lg mt-4")
-                for participant in view.expected:
+            if view.regulars:
+                ui.label(f"Expected ({len(view.regulars)})").classes("text-lg mt-4")
+                for regular in view.regulars:
                     ui.label(
-                        f"{participant.callsign} · {participant.last_grid or 'grid unknown'}"
-                        f" · {participant.sessions_attended} sessions"
+                        f"{regular.callsign} · {regular.grid_text} · {regular.attendance_text}"
                     ).classes("text-grey")
 
         table()

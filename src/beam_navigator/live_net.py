@@ -7,18 +7,20 @@ and snap_back() move the rotator, once per press (invariant 2).
 
 import sqlite3
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Protocol
 
 from beam_navigator.core.geometry import short_path
 from beam_navigator.core.maidenhead import grid_center, is_grid
-from beam_navigator.core.models import LatLon, Participant, RotatorProfile, Session
+from beam_navigator.core.models import LatLon, RotatorProfile, Session
 from beam_navigator.core.sector import SectorCheck, check_sector, sector_name
-from beam_navigator.desk import Desk
+from beam_navigator.desk import Desk, LookupView
 from beam_navigator.rotators.service import RotateOutcome
 from beam_navigator.store.repositories import NetRepository, StationRepository
 
-Mode = Literal["controller", "station"]
+Mode = Literal["controller", "station", "regular", "typed"]
 SortKey = Literal["roster", "bearing", "distance", "callsign"]
+RegularSort = Literal["callsign", "grid", "direction", "last"]
+GRID_NEEDED = "Grid needed"
 NO_ROTATOR = "No rotator for this band"
 
 
@@ -49,14 +51,30 @@ class NetRow:
 
 
 @dataclass(frozen=True)
+class RegularRow:
+    """A past participant of this net not yet in tonight's list (owner, 2026-10-30)."""
+
+    callsign: str
+    name: str | None
+    grid_text: str
+    bearing_deg: float | None
+    bearing_text: str | None
+    distance_text: str | None
+    attendance_text: str
+    last_seen: str
+
+
+@dataclass(frozen=True)
 class LiveNetView:
     title: str
     frequency: str
     controller: ControllerView
     rows: list[NetRow]
-    expected: list[Participant]
+    regulars: list[RegularRow]
     rotator: RotatorProfile | None
     rotate_reason: str | None
+    last_time: tuple[str, str] | None = None  # (date, notes) of the last closed session
+    closed: bool = False
 
 
 def sort_rows(rows: list[NetRow], key: SortKey) -> list[NetRow]:
@@ -69,7 +87,29 @@ def sort_rows(rows: list[NetRow], key: SortKey) -> list[NetRow]:
     return list(rows)  # roster order, as stored
 
 
-def filter_rows(rows: list[NetRow], text: str) -> list[NetRow]:
+def sort_regulars(rows: list[RegularRow], key: RegularSort) -> list[RegularRow]:
+    """Unknown grids and bearings sort last; ties go by callsign."""
+    by_call = sorted(rows, key=lambda r: r.callsign)
+    if key == "grid":
+        return sorted(by_call, key=lambda r: (r.grid_text == GRID_NEEDED, r.grid_text.upper()))
+    if key == "direction":
+        return sorted(by_call, key=lambda r: (r.bearing_deg is None, r.bearing_deg or 0.0))
+    if key == "last":
+        return sorted(by_call, key=lambda r: r.last_seen, reverse=True)
+    return by_call
+
+
+class _Filterable(Protocol):
+    @property
+    def callsign(self) -> str: ...
+    @property
+    def name(self) -> str | None: ...
+    @property
+    def grid_text(self) -> str: ...
+
+
+
+def filter_rows[Row: _Filterable](rows: list[Row], text: str) -> list[Row]:
     needle = text.strip().lower()
     if not needle:
         return list(rows)
@@ -95,10 +135,22 @@ class LiveNet:
             frequency=frequency,
             controller=self._controller(session),
             rows=self._rows(session_id),
-            expected=self.nets.expected(session_id),
+            regulars=self._regulars(session_id),
             rotator=rotator,
             rotate_reason=None if rotator is not None else NO_ROTATOR,
+            last_time=self.nets.last_closing_notes(session.net_id, session_id),
+            closed=session.status == "closed",
         )
+
+    def aim(self, session_id: int, text: str) -> tuple[LookupView, tuple[str, float] | None]:
+        """What typed text points at, looked up as on the dashboard. Records nothing and
+        sends nothing; the second value is the Rotate target, if there is one."""
+        net = self.nets.get_net(self.nets.get_session(session_id).net_id)
+        view = self.desk.look_up(text, net.band)
+        if not view.can_rotate or view.bearing_deg is None:
+            return view, None
+        label = view.title.split(" — ", 1)[0] if view.title else text.strip()
+        return view, (label, view.bearing_deg)
 
     def announce(self, session_id: int, sector: str) -> SectorCheck:
         """Records nothing and moves nothing: it only answers "is this call for me?"."""
@@ -115,9 +167,22 @@ class LiveNet:
         self.nets.set_session_controller(session_id, call, clean_grid, bearing=bearing)
 
     def target(
-        self, session_id: int, mode: Mode, checkin_id: int | None
+        self,
+        session_id: int,
+        mode: Mode,
+        checkin_id: int | None,
+        *,
+        callsign: str | None = None,
+        typed: tuple[str, float] | None = None,
     ) -> tuple[str, float] | None:
         """The label and true bearing Rotate would use; None when there is nothing to aim at."""
+        if mode == "typed":
+            return typed
+        if mode == "regular":
+            found = next((r for r in self._regulars(session_id) if r.callsign == callsign), None)
+            if found is None or found.bearing_deg is None:
+                return None
+            return found.callsign, found.bearing_deg
         if mode == "controller":
             controller = self._controller(self.nets.get_session(session_id))
             if controller.bearing_deg is None:
@@ -129,10 +194,17 @@ class LiveNet:
         return row.callsign, row.bearing_deg
 
     def rotate(
-        self, session_id: int, rotator_id: int, mode: Mode, checkin_id: int | None
+        self,
+        session_id: int,
+        rotator_id: int,
+        mode: Mode,
+        checkin_id: int | None,
+        *,
+        callsign: str | None = None,
+        typed: tuple[str, float] | None = None,
     ) -> RotateOutcome | None:
         """One explicit press: at most one command. None means nothing was sent."""
-        aim = self.target(session_id, mode, checkin_id)
+        aim = self.target(session_id, mode, checkin_id, callsign=callsign, typed=typed)
         if aim is None:
             return None
         label, bearing = aim
@@ -197,18 +269,42 @@ class LiveNet:
             back,
         )
 
+    def _grid(self, callsign: str, snapshot: str | None) -> tuple[str | None, str]:
+        """The grid to aim with and how to show it: the snapshot, else the saved record."""
+        if snapshot and is_grid(snapshot):
+            return snapshot, snapshot
+        saved = self._stations.get(callsign)
+        if saved is not None and saved.grid and is_grid(saved.grid):
+            return saved.grid, f"{saved.grid} (saved)"
+        return None, GRID_NEEDED
+
+    def _regulars(self, session_id: int) -> list[RegularRow]:
+        net_id = self.nets.get_session(session_id).net_id
+        rows = []
+        for participant in self.nets.expected(session_id):
+            call = participant.callsign
+            grid, grid_text = self._grid(call, participant.last_grid)
+            found = self.desk.bearing_to(grid)
+            attended, counted = self.nets.attendance(net_id, call)
+            record = self._stations.get(call)
+            rows.append(
+                RegularRow(
+                    callsign=call,
+                    name=record.name if record else None,
+                    grid_text=grid_text,
+                    bearing_deg=None if found is None else found.deg,
+                    bearing_text=None if found is None else found.text,
+                    distance_text=None if found is None else found.distance_text,
+                    attendance_text=f"{attended} of last {counted}",
+                    last_seen=participant.last_seen,
+                )
+            )
+        return rows
+
     def _rows(self, session_id: int) -> list[NetRow]:
         rows = []
         for checkin in self.nets.checkins(session_id):
-            grid_text = "Grid needed"
-            grid = None
-            if checkin.grid and is_grid(checkin.grid):
-                grid = grid_text = checkin.grid
-            else:
-                saved = self._stations.get(checkin.callsign)
-                if saved is not None and saved.grid and is_grid(saved.grid):
-                    grid = saved.grid
-                    grid_text = f"{saved.grid} (saved)"
+            grid, grid_text = self._grid(checkin.callsign, checkin.grid)
             found = self.desk.bearing_to(grid)
             rows.append(
                 NetRow(
