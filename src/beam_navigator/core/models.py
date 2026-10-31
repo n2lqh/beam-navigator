@@ -63,6 +63,8 @@ class Session:
     status: Literal["active", "closed", "imported"]
     raw_text: str | None
     controller_bearing: float | None = None  # tonight's measured bearing, if that is all
+    closing_notes: str | None = None  # the operator's notes for next time
+    closed_at: str | None = None  # UTC ISO time of the last close
 
 
 @dataclass(frozen=True)

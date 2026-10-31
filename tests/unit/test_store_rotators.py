@@ -120,7 +120,7 @@ def test_version_1_database_upgrades(tmp_path: Path) -> None:
     )
     old.close()
     conn = open_db(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 9
     assert AliasRepository(conn).get("CLUB") is not None
     assert RotatorRepository(conn).list() == []
     conn.close()

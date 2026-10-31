@@ -25,7 +25,7 @@ def table_names(conn: sqlite3.Connection) -> set[str]:
 
 def test_new_database_is_at_schema_version() -> None:
     conn = open_db(":memory:")
-    assert SCHEMA_VERSION == 8
+    assert SCHEMA_VERSION == 9
     assert user_version(conn) == SCHEMA_VERSION
     assert TABLES <= table_names(conn)
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1

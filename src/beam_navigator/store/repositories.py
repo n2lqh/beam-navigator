@@ -39,6 +39,13 @@ class DuplicateCheckIn(Exception):
         self.existing = existing
 
 
+class SessionClosed(ValueError):
+    """A closed session takes no new or changed check-ins until it is reopened."""
+
+    def __init__(self) -> None:
+        super().__init__("This session is closed. Reopen it to make changes.")
+
+
 def _latlon(row: sqlite3.Row) -> LatLon | None:
     if row["lat"] is None or row["lon"] is None:
         return None
@@ -362,7 +369,42 @@ class NetRepository:
             status=row["status"],
             raw_text=row["raw_text"],
             controller_bearing=row["controller_bearing"],
+            closing_notes=row["closing_notes"],
+            closed_at=row["closed_at"],
         )
+
+    def _check_open(self, session_id: int) -> None:
+        if self.get_session(session_id).status == "closed":
+            raise SessionClosed()
+
+    def close_session(self, session_id: int, notes: str) -> Session:
+        self.get_session(session_id)
+        with self._conn:
+            self._conn.execute(
+                "UPDATE session SET status = 'closed', closing_notes = ?, closed_at = ?"
+                " WHERE id = ?",
+                ((notes or "").strip() or None, _now(), session_id),
+            )
+        return self.get_session(session_id)
+
+    def reopen_session(self, session_id: int) -> Session:
+        """Back to active; the notes and closing time are kept."""
+        self.get_session(session_id)
+        with self._conn:
+            self._conn.execute("UPDATE session SET status = 'active' WHERE id = ?", (session_id,))
+        return self.get_session(session_id)
+
+    def last_closing_notes(self, net_id: int, before_session_id: int) -> tuple[str, str] | None:
+        """The date and notes of this net's most recently closed other session. Empty
+        notes there mean nothing to show, never an older session's notes."""
+        row = self._conn.execute(
+            "SELECT date, closing_notes FROM session WHERE net_id = ? AND id != ?"
+            " AND status = 'closed' ORDER BY closed_at DESC, id DESC LIMIT 1",
+            (net_id, before_session_id),
+        ).fetchone()
+        if row is None or not row["closing_notes"]:
+            return None
+        return row["date"], row["closing_notes"]
 
     def find_identical_import(self, net_id: int, date: str, raw_text: str) -> int | None:
         wanted = _canonical(raw_text)
@@ -518,6 +560,7 @@ class NetRepository:
             if not (relay_call and is_callsign(relay_call)):
                 raise ValueError("Via relay needs the relaying station's callsign.")
             relay = normalize_callsign(relay_call)
+        self._check_open(self.get_checkin_session(checkin_id))
         with self._conn:
             cursor = self._conn.execute(
                 "UPDATE checkin SET heard_state = ?, relay_call = ? WHERE id = ?",
@@ -546,6 +589,7 @@ class NetRepository:
         ).fetchone()
         if row is None:
             raise ValueError(f"No check-in with id {checkin_id}.")
+        self._check_open(row["session_id"])
         with self._conn:
             self._conn.execute(
                 "UPDATE checkin SET name = ?, grid = ?, qth = ?, report = ?, notes = ?"
@@ -642,6 +686,7 @@ class NetRepository:
         notes: str | None = None,
     ) -> CheckIn:
         call = normalize_callsign(callsign)
+        self._check_open(session_id)
         existing = self.checkins(session_id)
         if not allow_duplicate:
             key = base_callsign(call) if is_callsign(call) else call
