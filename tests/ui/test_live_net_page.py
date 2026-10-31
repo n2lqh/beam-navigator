@@ -474,3 +474,20 @@ async def test_i_hear_shows_direction_and_aims_without_rotating(
     user.find(marker="rotate").click()
     await user.should_see("Simulated:")
     assert len(sim.commands) == 1
+
+
+async def test_i_hear_aim_names_the_call_and_sits_left_of_qrz(
+    user: User, desk: Desk, w2kv: int
+) -> None:  # owner, 2026-10-31: "Aim to <CallSign>", then Look up on QRZ, same style
+    await open_net(user, desk, w2kv)
+    [aim] = user.find(marker="i-hear-aim").elements
+    assert aim.props["label"] == "Aim"  # nothing on the line yet
+    user.find(marker="entry-callsign").type("k9zzz")
+    await user.should_see("Aim to K9ZZZ")
+    [aim] = user.find(marker="i-hear-aim").elements
+    [qrz] = user.find(marker="qrz-lookup").elements
+    row = aim.parent_slot.children  # type: ignore[union-attr]
+    qrz_box = qrz.parent_slot.parent  # type: ignore[union-attr]  # its refreshable wrapper
+    assert qrz_box in row and row.index(aim) == row.index(qrz_box) - 1
+    assert aim.props.get("flat") == qrz.props.get("flat") is True
+    assert aim.props.get("size") == qrz.props.get("size")

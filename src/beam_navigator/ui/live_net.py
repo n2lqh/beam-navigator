@@ -412,23 +412,25 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
         with ui.row().classes("items-start gap-4"):
             with ui.column().classes("gap-1"):
                 i_hear.fields()
-            if qrz is not None:
-                i_hear.qrz_button()
 
             @ui.refreshable
             def heard_aim() -> None:
-                """Direction to the station on the line, and Aim: sets the target, never rotates."""
+                """Direction to the station on the line, Aim to <call> (sets the target, never
+                rotates), then Look up on QRZ, in one row (owner, 2026-10-31)."""
                 found = live.heard_aim(i_hear.callsign, i_hear.entry().grid)
+                call = normalize_callsign(i_hear.callsign) if i_hear.callsign else ""
                 with ui.row().classes("items-center gap-2 mt-2"):
                     ui.label(
                         "Direction: —" if found is None
                         else f"Direction: {found[1].text} · {found[1].distance_text}"
                     ).mark("i-hear-direction")  # fmt: skip
-                    button = ui.button("Aim", on_click=lambda: aim_heard(found)).props(
-                        "flat"
-                    ).mark("i-hear-aim")  # fmt: skip
+                    button = ui.button(
+                        f"Aim to {call}" if call else "Aim", on_click=lambda: aim_heard(found)
+                    ).props("flat").mark("i-hear-aim")  # same props as Look up on QRZ
                     button.on("click", js_handler=BLUR)
                     button.set_enabled(found is not None)
+                    if qrz is not None:
+                        i_hear.qrz_button()
 
             heard_aim()
 
