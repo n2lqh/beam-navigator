@@ -525,7 +525,7 @@ async def test_remapped_log_key(
 
 def test_keys_js_follows_the_keymap() -> None:
     from beam_navigator.core.keymap import DEFAULTS, parse_chord
-    from beam_navigator.ui.control import _keys_js
+    from beam_navigator.ui.entry_line import _keys_js
 
     keymap = {**DEFAULTS, "log": parse_chord("F2")}
     script = _keys_js(keymap, space_advances=False)
@@ -553,3 +553,14 @@ async def test_no_heard_states_option(user: User, desk: Desk, tonight: int) -> N
     await open_control(user, desk, tonight)
     await user.should_see("Include report")
     await user.should_not_see("Include my heard states")
+
+
+async def test_control_closed_session_refuses_log(
+    user: User, desk: Desk, tonight: int, conn: sqlite3.Connection
+) -> None:  # Review Focus 2: closed by the participant screen, opened here
+    NetRepository(conn).close_session(tonight, "")
+    await open_control(user, desk, tonight)
+    field(user, "callsign").set_value("K9ZZZ")
+    enter_twice(user)
+    await user.should_see("This session is closed")
+    assert NetRepository(conn).checkins(tonight) == []

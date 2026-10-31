@@ -9,7 +9,7 @@ import pytest
 
 from beam_navigator.core.geometry import compass_name, short_path
 from beam_navigator.core.maidenhead import grid_center
-from beam_navigator.core.models import Net, OperatorProfile
+from beam_navigator.core.models import Net, OperatorProfile, Station
 from beam_navigator.core.roster_parser import parse_roster
 from beam_navigator.desk import Desk
 from beam_navigator.net_control import Entry, NetControl
@@ -229,3 +229,26 @@ def test_qrz_fill_only_blanks(control: NetControl, qrz_examples: list[bytes]) ->
     )
     vague = replace(record, geoloc="state")
     assert control.qrz_fill(typed, vague).grid == ""  # approximate: never a grid
+
+
+def test_log_heard_marks_heard_and_saves_for_next_session(
+    control: NetControl, conn: sqlite3.Connection, net_id: int, tonight: int
+) -> None:  # acceptance 42
+    logged = control.log_heard(tonight, Entry("K9ZZZ", name="Pete", grid="FN10"))
+    assert logged.heard_state == "heard" and logged.grid == "FN10"
+    later = NetRepository(conn).start_session(net_id, "2026-11-09").id
+    [row] = [r for r in control.live.view(later).regulars if r.callsign == "K9ZZZ"]
+    assert row.grid_text == "FN10" and row.bearing_deg is not None
+
+
+def test_log_heard_keeps_record_unless_asked(
+    control: NetControl, conn: sqlite3.Connection, net_id: int, tonight: int
+) -> None:  # acceptance 43
+    StationRepository(conn).save(Station("K9ZZZ", "Pete", "FN10", None, None, "saved", ""))
+    control.log_heard(tonight, Entry("K9ZZZ", name="Pete", grid="FN11"))
+    record = StationRepository(conn).get("K9ZZZ")
+    assert record is not None and record.grid == "FN10"
+    later = NetRepository(conn).start_session(net_id, "2026-11-09").id
+    control.log_heard(later, Entry("K9ZZZ", name="Pete", grid="FN11"), update_record=True)
+    record = StationRepository(conn).get("K9ZZZ")
+    assert record is not None and record.grid == "FN11"

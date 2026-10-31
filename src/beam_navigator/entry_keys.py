@@ -33,10 +33,10 @@ def key_action(
     return "type"
 
 
-def next_field(field: str) -> str:
-    index = FIELDS.index(field)
-    return FIELDS[min(index + 1, len(FIELDS) - 1)]
+def next_field(field: str, fields: tuple[str, ...] = FIELDS) -> str:
+    index = fields.index(field)
+    return fields[min(index + 1, len(fields) - 1)]
 
 
-def previous_field(field: str) -> str:
-    return FIELDS[max(FIELDS.index(field) - 1, 0)]
+def previous_field(field: str, fields: tuple[str, ...] = FIELDS) -> str:
+    return fields[max(fields.index(field) - 1, 0)]

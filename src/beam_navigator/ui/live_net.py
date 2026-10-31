@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 from nicegui import events, ui
 
+from beam_navigator.core.callsign import is_callsign, normalize_callsign
+from beam_navigator.core.maidenhead import is_grid
 from beam_navigator.hotkeys import action_for
 from beam_navigator.live_net import (
     LiveNet,
@@ -17,9 +19,10 @@ from beam_navigator.live_net import (
     sort_regulars,
     sort_rows,
 )
-from beam_navigator.net_control import NetControl
+from beam_navigator.net_control import Entry, NetControl
 from beam_navigator.qrz_client import QrzClient
 from beam_navigator.rotators.service import RotateOutcome
+from beam_navigator.ui.entry_line import EntryLine
 
 COMPASS_LAYOUT = [["NW", "N", "NE"], ["W", "", "E"], ["SW", "S", "SE"]]
 HEARD_OPTIONS = {"": "—", "heard": "Heard", "weak": "Weak", "not_heard": "Not heard",
@@ -39,7 +42,8 @@ BLUR = "(e) => e.currentTarget.blur()"
 BLUR_ACTIVE = "() => document.activeElement && document.activeElement.blur()"
 # A row selects on click, except clicks that start in a form field (the heard select):
 # selecting rebuilds the table, which would close the select's menu as it opens.
-ROW_CLICK = "(e) => { if (!e.target.closest('.q-field')) emit(e) }"
+# Clicks on a row's own button (Heard) are that button's, not the row's.
+ROW_CLICK = "(e) => { if (!(e.target.closest('.q-field') || e.target.closest('.q-btn'))) emit(e) }"
 # Enter in Aim at looks the text up, then leaves the box so Ctrl+Enter rotates next.
 AIM_ENTER = "(e) => { emit(); e.target.blur() }"
 
@@ -62,6 +66,7 @@ class _State:
     sort: SortKey = "roster"
     regular_sort: RegularSort = "last"
     filter_text: str = ""
+    aim_call: str | None = None  # a typed callsign not in tonight's list yet
 
 
 def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = None) -> None:
@@ -142,12 +147,36 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
 
     def aim_enter() -> None:
         """Looks the typed text up and makes it the target. Never rotates (invariant 2)."""
-        view, target = live.aim(session_id, aim.value or "")
+        text = (aim.value or "").strip()
+        view, target = live.aim(session_id, text)
         parts = [view.title, view.bearing_text, view.distance_text, view.message]
         aim_result.set_text(view.error or " · ".join(p for p in parts if p))
+        tonight = {row.callsign for row in live.view(session_id).rows}
+        call = normalize_callsign(text) if is_callsign(text) else None
+        state.aim_call = call if call and call not in tonight else None
+        add_tonight.set_visibility(state.aim_call is not None)
         if target is not None:
             state.typed = target
             follow("typed")
+
+    def add_aimed_tonight() -> None:
+        """Puts the typed call on the I-hear line; logging it is still the operator's Enter."""
+        if state.aim_call is not None:
+            i_hear.fill_callsign(state.aim_call)
+
+    def heard_regular(callsign: str) -> None:
+        """Heard: adds the regular to tonight as on the I-hear line, from their record."""
+        found = control.autofill(callsign)
+        regular = next((r for r in live.view(session_id).regulars if r.callsign == callsign),
+                       None)  # fmt: skip
+        grid = found.grid or (regular.grid_text if regular and is_grid(regular.grid_text) else "")
+        try:
+            control.log_heard(session_id, Entry(callsign, name=found.name or "", grid=grid or ""))
+        except ValueError as exc:
+            _error(exc)
+            return
+        ui.notify(f"Logged {callsign}")
+        lists.refresh()
 
     def change_rotator(value: int | None) -> None:
         if value != state.rotator_id:
@@ -258,6 +287,11 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
             )  # fmt: skip
             aim.on("keydown.enter", aim_enter, js_handler=AIM_ENTER)
             aim_result = ui.label("").mark("aim-result")
+            add_tonight = ui.button("Add to tonight", on_click=add_aimed_tonight).props(
+                "flat dense"
+            ).mark("add-tonight")  # fmt: skip
+            add_tonight.on("click", js_handler=BLUR)
+            add_tonight.set_visibility(False)
 
         mode_toggle = ui.toggle(
             MODE_OPTIONS, value="controller", on_change=lambda e: set_mode(e.value),
@@ -309,6 +343,18 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                         else:
                             ui.label("")
             banner = ui.label("Announced sector: press a direction").mark("banner")
+
+        # Stations the operator hears, logged as on the net control screen (owner, 2026-10-30).
+        i_hear = EntryLine(
+            control, session_id, fields=("callsign", "name", "grid"), qrz=qrz,
+            on_logged=lambda: lists.refresh(), heard=True,
+        )  # fmt: skip
+        ui.label("I hear").classes("text-lg mt-2")
+        with ui.row().classes("items-start gap-4"):
+            with ui.column().classes("gap-1"):
+                i_hear.fields()
+            if qrz is not None:
+                i_hear.qrz_button()
 
         @ui.refreshable
         def lists() -> None:
@@ -375,6 +421,11 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                     ui.label(regular.distance_text or "").classes("w-20")
                     ui.label(regular.attendance_text).classes("w-24 text-grey")
                     ui.label(f"Last: {regular.last_seen}").classes("w-32 text-grey")
+                    ui.button(
+                        "Heard", on_click=lambda c=regular.callsign: heard_regular(c)
+                    ).props("flat dense").mark(f"heard-regular-{regular.callsign}").on(
+                        "click", js_handler=BLUR
+                    )  # fmt: skip
 
         lists()
 

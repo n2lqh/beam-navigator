@@ -64,3 +64,11 @@ def test_next_and_previous() -> None:
 def test_ends_do_not_wrap() -> None:
     assert next_field("notes") == "notes"
     assert previous_field("callsign") == "callsign"
+
+
+def test_next_field_within_given_fields() -> None:  # the participant's I-hear line
+    three = ("callsign", "name", "grid")
+    assert next_field("name", three) == "grid"
+    assert next_field("grid", three) == "grid"
+    assert previous_field("callsign", three) == "callsign"
+    assert previous_field("grid", three) == "name"

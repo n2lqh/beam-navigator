@@ -312,3 +312,75 @@ async def test_last_time_card(
 async def test_no_last_time_card_without_notes(user: User, desk: Desk, w2kv: int) -> None:
     await open_net(user, desk, w2kv)
     await user.should_not_see(marker="last-time")
+
+
+def entry(user: User, name: str) -> ui.input:
+    [found] = user.find(marker=f"entry-{name}").elements
+    assert isinstance(found, ui.input)
+    return found
+
+
+def press_enter(user: User, name: str) -> None:
+    user.find(marker=f"entry-{name}").trigger(
+        "keydown", {"code": "Enter", "shiftKey": False, "ctrlKey": False, "altKey": False}
+    )
+
+
+async def test_i_hear_logs_and_moves_regular(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:
+    tonight = tonight_after(conn, w2kv)
+    await open_net(user, desk, tonight)
+    await user.should_see(marker="regular-W2KV")
+    entry(user, "callsign").set_value("W2KV")
+    press_enter(user, "callsign")  # first Enter fills (decision 31)
+    press_enter(user, "callsign")  # the next logs
+    await user.should_see("Logged W2KV")
+    [checkin] = NetRepository(conn).checkins(tonight)
+    assert checkin.callsign == "W2KV" and checkin.heard_state == "heard"
+    await user.should_not_see(marker="regular-W2KV")
+    assert sim.commands == []
+
+
+async def test_i_hear_has_three_fields(user: User, desk: Desk, w2kv: int) -> None:
+    await open_net(user, desk, w2kv)
+    for name in ("callsign", "name", "grid"):
+        await user.should_see(marker=f"entry-{name}")
+    for name in ("qth", "report", "notes"):
+        await user.should_not_see(marker=f"entry-{name}")
+
+
+async def test_i_hear_duplicate_asks(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int
+) -> None:  # Review Focus 4
+    tonight = tonight_after(conn, w2kv)
+    NetRepository(conn).add_checkin(tonight, "W2KV")
+    await open_net(user, desk, tonight)
+    entry(user, "callsign").set_value("W2KV")
+    press_enter(user, "callsign")
+    press_enter(user, "callsign")
+    await user.should_see("Already checked in")
+    assert len(NetRepository(conn).checkins(tonight)) == 1
+
+
+async def test_heard_button_sends_nothing(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:  # acceptance 39
+    tonight = tonight_after(conn, w2kv)
+    await open_net(user, desk, tonight)
+    user.find(marker="heard-regular-W2KV").click()
+    await user.should_not_see(marker="regular-W2KV")
+    [checkin] = NetRepository(conn).checkins(tonight)
+    assert checkin.callsign == "W2KV" and checkin.heard_state == "heard"
+    assert sim.commands == []
+
+
+async def test_add_tonight_fills_i_hear(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int
+) -> None:
+    tonight = tonight_after(conn, w2kv)
+    await open_net(user, desk, tonight)
+    user.find(marker="aim").type("W2KV").trigger("keydown.enter")
+    user.find(marker="add-tonight").click()
+    assert entry(user, "callsign").value == "W2KV"
+    assert NetRepository(conn).checkins(tonight) == []

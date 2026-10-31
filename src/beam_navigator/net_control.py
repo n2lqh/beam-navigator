@@ -196,6 +196,12 @@ class NetControl:
             self._update_record(call, entry)
         return logged
 
+    def log_heard(self, session_id: int, entry: Entry, update_record: bool = False) -> CheckIn:
+        """A participant logs a station they hear: the same rules as log(), marked Heard."""
+        logged = self.log(session_id, entry, update_record=update_record)
+        self.nets.set_heard(logged.id, "heard", None)
+        return next(c for c in self.nets.checkins(session_id) if c.id == logged.id)
+
     def update_existing(self, checkin_id: int, entry: Entry) -> CheckIn:
         grid = entry.grid.strip()
         if grid and not is_grid(grid):
