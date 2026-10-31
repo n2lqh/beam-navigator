@@ -22,6 +22,8 @@ Beam Navigator should help attendees and net controllers have a better, more pro
 | Live net screen: **You → controller** and **Controller → you** (with the sector), calculated directly rather than by adding 180° | You know where the controller must point to hear you, even when the controller doesn't say. |
 | Announced sector keys and the **YOUR SECTOR IS UP** banner | You can tell when a call is for your direction, even if you aren't one of the regulars. |
 | **Follow Controller** / **Follow Station** and **Snap back to controller** | One press turns the beam back to net control. |
+| **Aim at**, **Regulars not heard yet** and **I hear** on the live net screen | Follow a net with no roster: point at anyone you hear, and they are remembered for next time. |
+| **Close my session** with notes | Your notes come back at the next session of the same net. |
 | **Substitute controller tonight** | Bearings stay right when someone else runs the net. |
 | Importing the roll call the controller publishes after a net | The stations and grids are saved, so the next net starts with them known. |
 | Nets, past sessions and participants | You see who usually checks in, and from where. |
@@ -152,10 +154,14 @@ Open a session to follow the net.
 
 - **You → controller** is where you point to work net control. **Controller → you** is where the controller must point to hear you, with its sector. It is worked out directly from the controller's location, not by adding 180°.
 - When the controller announces a direction ("anyone to the northeast?"), press its number-pad key (8 N, 9 NE, 6 E, 3 SE, 2 S, 1 SW, 4 W, 7 NW) or click it under **Announced sector: press a direction**. If it is your sector, a large **YOUR SECTOR IS UP** banner appears. It never claims the controller can hear you. If the controller's location is unknown, it says "Controller location unknown — can't tell if this call is for you."
-- **Follow Controller** or **Follow Station** decides what Rotate points at. **Snap back to controller** (or Home) points at net control and turns the beam in one press.
+- **Follow Controller**, **Follow Station** or **Follow Typed** decides what Rotate points at. **Snap back to controller** (or Home) points at net control and turns the beam in one press.
+- **Aim at**: type a callsign, grid, alias or direction (`270`, `W`) and press Enter. The bearing appears and Rotate points there, but nothing turns until you press Rotate (or Ctrl+Enter, which works straight after Enter). While you type, both lists below narrow to matching stations; clear the box to see everyone. A callsign not yet in tonight's list offers **Add to tonight**.
+- **I hear**: type the callsign of a station you hear, Enter to fill its name and grid from what Beam Navigator knows, Enter again to log it. It works like the net control entry line, and the station is marked Heard and remembered for the next net.
 - **Substitute controller tonight**: someone else is running the net? Enter their callsign, grid, or a bearing you measured. It applies to this session only.
 - Mark each station **Heard**, **Weak**, **Not heard** or **Via relay**. These are private to you.
-- Stations that have checked in to this net before are listed as **Expected** until they check in tonight.
+- **Tonight** lists the stations in this session; sort it by **Check-in order**, **Callsign**, **Direction** or **Distance**.
+- **Regulars not heard yet** lists everyone who has checked in to this net before, with bearing, distance, attendance and last check-in. Sort by **Last check-in**, **Callsign**, **Grid** or **Direction**. Click a regular to point Rotate at them; press **Heard** to add them to tonight.
+- **Close my session…** when the net ends. Add **Notes for next time** ("K3WGR weak from 40°, try 30°") and they appear as **Last time** at the top of the next session of this net, on both screens. A closed session is read-only, but you can still aim and rotate; **Reopen** makes it editable again. Closing notes are private: they are never exported.
 
 ## Running a net (net control)
 

@@ -108,6 +108,12 @@ Parser requirements:
 - **Target mode:** Follow Controller or Follow Station. The mode decides what Rotate points at. A **Snap back to controller** button and hotkey (`Home`) target the controller and rotate in one explicit press.
 - **Heard state** per row: Heard / Weak / Not heard / Via relay (with relaying callsign). Private to the user.
 - **Substitute controller tonight:** enter a different callsign, grid, or just a manually measured bearing. Applies to this session only.
+- **Works without a roster (owner, 2026-10-30; decision 42).** A participant usually has no roster during the net:
+  - **Aim at:** one box takes a callsign, grid, alias or direction, resolved as on the dashboard. Enter shows the bearing and makes it the Rotate target ("Follow Typed") but never rotates; Ctrl+Enter or Rotate then turns the beam. While typing, the box also filters both lists by callsign, name or grid. A typed callsign not yet in tonight's list offers **Add to tonight**, which puts it on the I-hear line.
+  - **Regulars not heard yet:** everyone who has checked in to this net before and is not in tonight's list, with name, grid, bearing and distance from the user, attendance and last check-in. Sort by **Last check-in** (default, newest first), **Callsign**, **Grid** or **Direction**; unknown grids and bearings sort last, ties by callsign. Clicking a row makes it the Rotate target. **Heard** adds the station to tonight.
+  - **Tonight** sorts by **Check-in order** (default), **Callsign**, **Direction** or **Distance**. The separate Filter box and the general Sort select are gone.
+  - **I hear:** Callsign → Name → Grid, the net control entry line itself (same keys, auto-fill, partial-call matching, duplicate check, session-only or update-record choice, QRZ). Each station is logged to this session as Heard, so it is a regular at the next session.
+  - **Close my session…** with **Notes for next time**. The session turns read-only (Aim at, Rotate and Snap back still work) until **Reopen**. The next session of the same net shows the notes as **Last time (date)** on the live net and net control screens; a newest closed session with no notes shows no card. Closing notes are private and never exported.
 
 ### 4.5 Net controller screen
 
@@ -263,7 +269,7 @@ Parser rules these fixtures add:
 11. Each fixture parses to its expected rows, controller and published bearings.
 12. Published bearings never appear in the "from you" column.
 13. Re-importing the same text for the same net and date prompts replace or keep.
-14. Importing the W2KV roster for 2026-10-26 and starting a new session for 2026-11-02 shows its 17 stations as expected, none checked in.
+14. Importing the W2KV roster for 2026-10-26 and starting a new session for 2026-11-02 shows its 17 stations as regulars not heard yet, none checked in.
 15. A substitute controller in one session leaves the net default and earlier sessions unchanged.
 
 ### Live net
@@ -291,6 +297,19 @@ Parser rules these fixtures add:
 31. Every test above passes with networking disabled.
 32. A malformed paste (binary garbage, 1 MB of text) is handled without a crash.
 33. A 100-station roster parses and calculates in under 2 seconds.
+
+### Participant (owner, 2026-10-30)
+37. Typing a callsign, grid, alias or heading in Aim at and pressing Enter shows its bearing from the user and sends no rotator command.
+38. After that, Ctrl+Enter rotates to the typed target with exactly one command.
+39. Clicking a Regulars row or pressing its Heard button sends no rotator command.
+40. Regulars sort by callsign, grid, direction and last check-in; stations with an unknown grid or bearing sort last.
+41. Typing in Aim at narrows both lists and sends no rotator command. Tonight sorts by check-in order, callsign, direction and distance.
+42. A station added with the I-hear line on one session appears under Regulars on the next session of the same net, with its grid and bearing.
+43. Adding a station whose name or grid differs from its record leaves the record unchanged unless "Update station record" is chosen.
+44. Closing a session with notes stores them; the next session of that net shows them under "Last time"; a different net does not.
+45. A closed session refuses adds until reopened; Rotate still works.
+46. Closing notes never appear in text, CSV or JSON exports.
+47. Tests 37–46 pass with networking disabled.
 
 ### Online lookup
 34. With no network, Look up on QRZ reports that QRZ cannot be reached, and nothing else changes.
