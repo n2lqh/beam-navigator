@@ -59,17 +59,21 @@ It does **not** control your radio (no CAT), track satellites or the Moon, contr
 
 ### Windows
 
-Beam Navigator for Windows is one file, `BeamNavigator.exe`. No Python is needed.
+Download `BeamNavigatorSetup.exe` from the release page and run it. No Python is needed, and no administrator password: it installs for your Windows user only.
 
-1. Put `BeamNavigator.exe` anywhere you like, for example your Desktop.
-2. Double-click it. Because the file is not signed, Windows may say **Windows protected your PC**. Choose **More info**, then **Run anyway**. The first start takes a few seconds while the program unpacks; wait for the browser rather than double-clicking again.
-3. A black console window opens, then your browser opens Beam Navigator. Keep the console window open while you use the app; **close it to stop Beam Navigator**.
+1. Because the installer is not signed, Windows may say **Windows protected your PC**. Choose **More info**, then **Run anyway**.
+2. Accept the licence, choose whether you want a desktop icon, and press **Install**. Leave **Launch Beam Navigator** ticked to start it straight away.
+3. From then on, start it from the **Start menu** (type "Beam Navigator") or the desktop icon. The first start takes a few seconds while the program unpacks; wait for the browser rather than starting it again.
 
-If you double-click it again while it is already running, the second copy says "Port 8080 is already in use. Beam Navigator may already be running…" with the address to open. Press Enter to close that message.
+Beam Navigator runs quietly in the background and shows itself in your browser; there is no other window. **To stop it, press Quit** at the top right of any page. Closing the browser tab does not stop it. If you start it again while it is already running, your browser simply opens the running copy.
 
-To give the program options such as `--port` (below), open a Command Prompt in the folder where `BeamNavigator.exe` is and type, for example, `BeamNavigator.exe --port 8090`.
+To update, run the new `BeamNavigatorSetup.exe`; it replaces the program (it asks to close a running copy first). To remove it, use **Settings → Apps → Installed apps → Beam Navigator → Uninstall**. Updating and uninstalling never touch your stations, nets and history, which live in your data folder (below).
 
-To build the program yourself from the project folder (with the app stopped): `uv run python packaging/build_windows.py`. The file appears in `dist`.
+The release also has the plain program, `BeamNavigator.exe`, for running without installing: put it anywhere and double-click it. It has no Start menu entry.
+
+To give the program options such as `--port` (below), open a Command Prompt in the folder where `BeamNavigator.exe` is (the installer puts it in `%LOCALAPPDATA%\Programs\Beam Navigator`) and type, for example, `BeamNavigator.exe --port 8090`. What the server would have printed goes to `beamnav.log` in the data folder.
+
+To build the program and installer yourself from the project folder (with the app stopped, and Inno Setup 6 installed once with `winget install --id JRSoftware.InnoSetup --exact --scope user`): `uv run python packaging/build_windows.py`. The files appear in `dist`.
 
 ### macOS, Linux and Raspberry Pi
 
@@ -248,7 +252,8 @@ Settings → About shows the version, the copyright, the licence, and links to t
 
 ## Troubleshooting
 
-- **"Port 8080 is already in use…"** Beam Navigator is probably already running: open http://127.0.0.1:8080. To run a second copy, or if another program uses port 8080, start it with `--port` and another number (on Windows, from a Command Prompt: `BeamNavigator.exe --port 8090`).
+- **"Port 8080 is already in use…"** Another program is using port 8080 (a running Beam Navigator would simply open in your browser instead). Start Beam Navigator with `--port` and another number (on Windows, from a Command Prompt: `BeamNavigator.exe --port 8090`).
+- **Beam Navigator seems to be running but no window is open.** Start it again: your browser opens the running copy. Press **Quit** there to stop it.
 - **"Command sent — position unverified"** The rotator doesn't report its position, so Beam Navigator can't confirm where the beam is. Watch your rotator controller.
 - **The rotator doesn't respond (PstRotator).** Check PstRotator is running and its UDP port matches the Port in Settings → Rotators, and that Windows Firewall allows Beam Navigator on your home network (see Rotators).
 - **"Set up your station first: Settings → Station."** No station is active. Finish the Welcome wizard, or activate a station in Settings → Station.

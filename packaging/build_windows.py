@@ -9,11 +9,16 @@ and the Windows Credential Manager backend for the QRZ login.
 
 The build also writes THIRD_PARTY_NOTICES.txt, bundles it, and copies it beside the .exe
 for the release; Windows file properties carry the version and copyright (decision 41).
+
+Then Inno Setup 6 wraps both in dist/BeamNavigatorSetup.exe, which adds the Start menu entry
+and an uninstaller (decision 45). Install it once with:
+    winget install --id JRSoftware.InnoSetup --exact --scope user
 """
 
 import os
 import re
 import shutil
+import subprocess
 import sys
 from importlib import metadata
 from pathlib import Path
@@ -26,8 +31,10 @@ NOTICES = "THIRD_PARTY_NOTICES.txt"
 LICENSE_FILE = re.compile(r"^(LICEN[CS]E|COPYING|NOTICE)", re.I)
 BANNER = re.compile(r"\A\s*/\*[!*]?(.*?)\*/", re.S)
 RULE = "=" * 78
+INSTALLER = "BeamNavigatorSetup.exe"
+INSTALLER_SCRIPT = ROOT / "packaging" / "BeamNavigator.iss"
 OPTIONS = [
-    "--noconfirm", "--clean", "--onefile", "--name", NAME,
+    "--noconfirm", "--clean", "--onefile", "--noconsole", "--name", NAME,
     "--distpath", str(ROOT / "dist"), "--workpath", str(ROOT / "build"),
     "--specpath", str(ROOT / "build"),
     "--collect-all", "nicegui",
@@ -157,13 +164,40 @@ VSVersionInfo(
 """
 
 
+def find_iscc() -> Path | None:
+    """Inno Setup's compiler: on PATH, or where a per-user or all-users install puts it."""
+    found = shutil.which("ISCC")
+    if found:
+        return Path(found)
+    homes = [os.environ.get("LOCALAPPDATA", ""), os.environ.get("ProgramFiles(x86)", ""),
+             os.environ.get("ProgramFiles", "")]  # fmt: skip
+    for home in homes:
+        if home and (Path(home) / "Inno Setup 6" / "ISCC.exe").exists():
+            return Path(home) / "Inno Setup 6" / "ISCC.exe"
+        if home and (Path(home) / "Programs" / "Inno Setup 6" / "ISCC.exe").exists():
+            return Path(home) / "Programs" / "Inno Setup 6" / "ISCC.exe"
+    return None
+
+
+def installer_command(iscc: Path, version: str) -> list[str]:
+    return [str(iscc), f"/DAppVersion={version}", "/Q", str(INSTALLER_SCRIPT)]
+
+
 def main() -> None:
     if sys.platform != "win32":
         raise SystemExit("Build the Windows executable on Windows.")
     import PyInstaller.__main__
 
     exe = ROOT / "dist" / f"{NAME}.exe"
+    iscc = find_iscc()
+    if iscc is None:  # before the long build, not after it
+        raise SystemExit(
+            "Inno Setup 6 was not found. Install it once with:\n"
+            "    winget install --id JRSoftware.InnoSetup --exact --scope user"
+        )
     exe.unlink(missing_ok=True)  # never report an old build as new
+    setup = ROOT / "dist" / INSTALLER
+    setup.unlink(missing_ok=True)
     (ROOT / "dist" / NOTICES).unlink(missing_ok=True)
     work = ROOT / "build"
     work.mkdir(exist_ok=True)
@@ -181,7 +215,10 @@ def main() -> None:
         exe.unlink()
         raise SystemExit(f"Removed the build: these files hold {ROOT}: {', '.join(leaks)}")
     shutil.copyfile(notices, ROOT / "dist" / NOTICES)
-    print(f"Built {exe} ({exe.stat().st_size / 1_000_000:.0f} MB) and dist/{NOTICES}")
+    subprocess.run(installer_command(iscc, __version__), check=True)
+    if not setup.exists():
+        raise SystemExit("Inno Setup did not produce the installer; see the messages above.")
+    print(f"Built {exe} ({exe.stat().st_size / 1_000_000:.0f} MB), dist/{NOTICES} and {setup}")
 
 
 if __name__ == "__main__":

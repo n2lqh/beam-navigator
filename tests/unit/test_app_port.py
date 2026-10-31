@@ -49,18 +49,95 @@ def test_no_browser_option() -> None:
     assert not build_parser().parse_args([]).no_browser
 
 
-def test_frozen_with_no_keyboard_still_exits_cleanly(
+def test_frozen_shows_a_message_box(
     taken_port: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Hand check: the .exe started with no stdin hit EOFError at "Press Enter to close."
-    import io
+    # The .exe has no console (decision 44), so the reason goes in a Windows message box.
+    # Patch and call app.main on the same module object: NiceGUI's test plugin can import
+    # it afresh, and a stale main showed a real message box during a full run.
     import sys
 
+    from beam_navigator.ui import app
+
+    shown: list[str] = []
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    monkeypatch.setattr(app, "message_box", shown.append)
     with pytest.raises(SystemExit) as stopped:
-        main(["--data-dir", str(tmp_path), "--port", str(taken_port)])
+        app.main(["--data-dir", str(tmp_path), "--port", str(taken_port)])
     assert stopped.value.code == 1
+    assert len(shown) == 1 and "is already in use" in shown[0]
+
+
+@pytest.fixture
+def running_copy() -> Iterator[int]:
+    """A server on the port that answers as Beam Navigator does."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from beam_navigator.ui.app import IDENTITY, IDENTITY_PATH
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            body = IDENTITY.encode() if self.path == IDENTITY_PATH else b""
+            self.send_response(200 if body else 404)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield server.server_address[1]
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.mark.parametrize("args, opened", [([], True), (["--no-browser"], False)])
+def test_second_launch_opens_the_running_copy(
+    running_copy: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    args: list[str], opened: bool,
+) -> None:  # owner, 2026-10-31: no console, so a second double-click just shows the app
+    from beam_navigator.ui import app
+
+    urls: list[str] = []
+    shown: list[str] = []
+    monkeypatch.setattr(app.webbrowser, "open", urls.append)
+    monkeypatch.setattr(app, "message_box", shown.append)
+    with pytest.raises(SystemExit) as stopped:
+        app.main(["--data-dir", str(tmp_path / "data"), "--port", str(running_copy), *args])
+    assert stopped.value.code == 0
+    assert urls == ([f"http://127.0.0.1:{running_copy}"] if opened else [])
+    assert shown == []
+    assert not (tmp_path / "data").exists()
+
+
+def test_without_a_console_output_goes_to_the_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A windowed .exe has no stdout or stderr; the server's log must still have somewhere to go.
+    import sys
+
+    from beam_navigator.ui.app import LOG_FILE, log_without_console
+
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+    log_without_console(tmp_path)
+    assert sys.stdout is not None and sys.stderr is sys.stdout
+    print("NiceGUI ready to go")
+    sys.stdout.close()
+    assert "NiceGUI ready to go" in (tmp_path / LOG_FILE).read_text(encoding="utf-8")
+
+
+def test_with_a_console_nothing_changes(tmp_path: Path) -> None:
+    import sys
+
+    from beam_navigator.ui.app import LOG_FILE, log_without_console
+
+    before = sys.stdout, sys.stderr
+    log_without_console(tmp_path)
+    assert (sys.stdout, sys.stderr) == before
+    assert not (tmp_path / LOG_FILE).exists()
 
 
 class RecordingSocket:
@@ -118,3 +195,19 @@ async def test_robots_txt_is_answered(user: object) -> None:
         reply = await client.get("/robots.txt?498143")
     assert reply.status_code == 200
     assert reply.text == ROBOTS_TXT and reply.headers["content-type"].startswith("text/plain")
+
+
+async def test_identity_is_answered(user: object) -> None:
+    # How a second launch knows the program on the port is Beam Navigator (decision 44).
+    import httpx
+    from nicegui import app
+
+    from beam_navigator.about import TITLE
+    from beam_navigator.ui.app import IDENTITY, IDENTITY_PATH, register_pages
+
+    register_pages(lambda: None)  # type: ignore[arg-type,return-value]
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        reply = await client.get(IDENTITY_PATH)
+    assert reply.status_code == 200 and reply.text == IDENTITY == TITLE

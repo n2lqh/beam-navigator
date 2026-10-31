@@ -37,7 +37,7 @@ uv run ruff check . && uv run mypy src/beam_navigator/core
 uv run beamnav bearing FN20ok   # CLI bearing
 uv run beamnav-rotor --adapter simulation --az 90
 uv run beamnav-ui               # start the web UI
-uv run python packaging/build_windows.py   # Windows .exe in dist/ (stop the app first)
+uv run python packaging/build_windows.py   # Windows .exe + BeamNavigatorSetup.exe in dist/ (stop the app first; needs Inno Setup 6)
 ```
 
 ## Station context (for manual testing only)

@@ -40,3 +40,23 @@ def test_finds_the_path_in_either_slash_style_and_case() -> None:
     assert build_windows.holds_path(url, root)
     assert build_windows.holds_path(rb"c:\users\someone\projects\beam_navigator\app.py", root)
     assert not build_windows.holds_path(rb"beam_navigator\ui\app.py", root)
+
+
+def test_exe_has_no_console_window() -> None:
+    # owner, 2026-10-31: no black window beside the app; Quit stops it (decision 44)
+    assert "--noconsole" in build_windows.OPTIONS
+
+
+def test_installer_command_passes_the_version() -> None:  # decision 45
+    iscc = Path("C:/Inno/ISCC.exe")
+    command = build_windows.installer_command(iscc, "1.2.0")
+    assert command == [str(iscc), "/DAppVersion=1.2.0", "/Q",
+                       str(ROOT / "packaging" / "BeamNavigator.iss")]  # fmt: skip
+
+
+def test_installer_script_installs_per_user_with_a_start_menu_entry() -> None:
+    script = (ROOT / "packaging" / "BeamNavigator.iss").read_text(encoding="utf-8")
+    assert "PrivilegesRequired=lowest" in script  # no administrator prompt
+    assert r'Name: "{autoprograms}\Beam Navigator"; Filename: "{app}\BeamNavigator.exe"' in script
+    assert "OutputBaseFilename=BeamNavigatorSetup" in script
+    assert "AppId={{1215C06F-B505-44B5-9992-1DB60B0C4D65}" in script  # never changes

@@ -4,6 +4,8 @@ rule lives in beam_navigator.desk and below."""
 import argparse
 import socket
 import sys
+import urllib.request
+import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 
@@ -11,6 +13,7 @@ from fastapi.responses import PlainTextResponse, RedirectResponse
 from nicegui import app, ui
 from platformdirs import user_data_dir
 
+from beam_navigator.about import TITLE
 from beam_navigator.desk import Desk
 from beam_navigator.net_control import NetControl
 from beam_navigator.nets import NetBook
@@ -34,6 +37,11 @@ DEFAULT_PORT = 8080
 # console the operator sees (owner, 2026-10-29; decision 39).
 ROBOTS_TXT = "User-agent: *\nDisallow: /\n"
 HOST = "127.0.0.1"  # localhost only: LAN access is off by default (requirements 8)
+# A second launch asks the port who is there; only Beam Navigator answers this (decision 44).
+IDENTITY_PATH = "/beam-navigator.txt"
+IDENTITY = TITLE
+PROBE_TIMEOUT_S = 2.0
+LOG_FILE = "beamnav.log"
 PORT_IN_USE = (
     "Port {port} is already in use. Beam Navigator may already be running: open"
     " http://127.0.0.1:{port} in your browser. To run a second copy, start it with --port"
@@ -58,13 +66,62 @@ def port_free(host: str, port: int) -> bool:
     return True
 
 
+def running_copy_at(port: int) -> bool:
+    """True when the program on this port answers as Beam Navigator."""
+    try:
+        with urllib.request.urlopen(
+            f"http://{HOST}:{port}{IDENTITY_PATH}", timeout=PROBE_TIMEOUT_S
+        ) as reply:
+            return bool(reply.read().decode("utf-8", "replace") == IDENTITY)
+    except (OSError, ValueError):
+        return False
+
+
+def message_box(text: str) -> None:
+    """The .exe has no console (decision 44), so it says why in a Windows message box."""
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, text, TITLE, 0x40)  # MB_ICONINFORMATION
+
+
+def log_without_console(data_dir: Path) -> None:
+    """A windowed .exe has no stdout or stderr: the server's messages go to beamnav.log in
+    the data folder instead, rewritten each start. With a console nothing changes."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    # Open for the life of the process: the server writes here until it stops.
+    log = (data_dir / LOG_FILE).open("w", encoding="utf-8", buffering=1)  # noqa: SIM115
+    sys.stdout = sys.stderr = log
+
+
 def header() -> None:
+    with ui.dialog() as stopped_dialog, ui.card():
+        stopped = ui.label("").classes("text-lg")
+    stopped_dialog.props("persistent")
+
+    def quit_now() -> None:
+        quit_dialog.close()
+        stopped.set_text("Beam Navigator has stopped. You can close this tab.")
+        stopped_dialog.open()
+        # A moment for the page to show the message before the server goes away.
+        ui.timer(0.5, lambda: app.shutdown(), once=True)
+
+    with ui.dialog() as quit_dialog, ui.card():
+        ui.label("Quit Beam Navigator?").classes("text-lg")
+        ui.label("The antenna stays where it is. Start Beam Navigator again to carry on.")
+        with ui.row():
+            ui.button("Quit", on_click=quit_now).mark("quit-confirm")
+            ui.button("Cancel", on_click=quit_dialog.close).props("flat").mark("quit-cancel")
+
     with ui.header().classes("items-center gap-6"):
         ui.label("Beam Navigator").classes("text-lg font-bold")
         ui.link("Dashboard", "/").classes("text-white")
         ui.link("Import", "/import").classes("text-white")
         ui.link("Nets", "/nets").classes("text-white")
         ui.link("Settings", "/settings").classes("text-white")
+        ui.space()
+        ui.button("Quit", on_click=quit_dialog.open).props("flat color=white").mark("quit")
 
 
 def register_pages(
@@ -76,6 +133,10 @@ def register_pages(
     @app.get("/robots.txt", include_in_schema=False)
     def robots() -> PlainTextResponse:
         return PlainTextResponse(ROBOTS_TXT)
+
+    @app.get(IDENTITY_PATH, include_in_schema=False)
+    def identity() -> PlainTextResponse:
+        return PlainTextResponse(IDENTITY)
 
     @ui.page("/")
     def dashboard_page(later: str | None = None) -> RedirectResponse | None:
@@ -160,16 +221,20 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     if not port_free(HOST, args.port):
-        # A second double-click of the .exe: say why, not a traceback (decision 36).
-        print(PORT_IN_USE.format(port=args.port))
+        if running_copy_at(args.port):
+            # A second double-click: show the copy that is already running (decision 44).
+            if not args.no_browser:
+                webbrowser.open(f"http://{HOST}:{args.port}")
+            raise SystemExit(0)
+        # Something else holds the port: say why, not a traceback (decision 36).
+        message = PORT_IN_USE.format(port=args.port)
+        print(message)
         if getattr(sys, "frozen", False):
-            try:
-                input("Press Enter to close.")  # the console window closes on exit
-            except EOFError:
-                pass  # started with no keyboard, e.g. by a script
+            message_box(message)
         raise SystemExit(1)
     data_dir: Path = args.data_dir
     data_dir.mkdir(parents=True, exist_ok=True)
+    log_without_console(data_dir)
     conn = open_db(data_dir / DB_FILE)
     desk = Desk(conn, RotateService(conn))
     register_pages(lambda: desk)
