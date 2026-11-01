@@ -19,12 +19,12 @@ Beam Navigator should help attendees and net controllers have a better, more pro
 | Feature | What it does for you |
 |---|---|
 | Bearing and distance from your own station to a callsign with a known location, or any grid, state or heading | You know where to point without working it out. |
-| Live net screen: **You → controller** and **Controller → you** (with the sector), calculated directly rather than by adding 180° | You know where the controller must point to hear you, even when the controller doesn't say. |
+| Live net screen: the **Net control** line with your bearing to them, and the compass that works out where net control must point to hear you, calculated directly rather than by adding 180° | You know whether a call is for you, even when the controller doesn't say. |
 | Announced sector keys and the **YOUR SECTOR IS UP** banner | You can tell when a call is for your direction, even if you aren't one of the regulars. |
-| **Follow Controller** / **Follow Station** and **Snap back to controller** | One press turns the beam back to net control. |
-| **Aim at**, **Regulars not heard yet** and **I hear** on the live net screen | Follow a net with no roster: point at anyone you hear, and they are remembered for next time. |
+| One **Target** and **Rotate to net control** | You always see what Rotate will turn to; one press turns the beam back to net control. |
+| **Find or point at**, **Regulars not heard yet** and **I hear** on the live net screen | Follow a net with no roster: point at anyone you hear, and they are remembered for next time. |
 | **Close my session** with notes | Your notes come back at the next session of the same net. |
-| **Substitute controller tonight** | Bearings stay right when someone else runs the net. |
+| **Use for tonight** / **Save for this net** for net control | Bearings stay right when someone else runs the net, and a net with no net control can be fixed for good. |
 | Importing the roll call the controller publishes after a net | The stations and grids are saved, so the next net starts with them known. |
 | Nets, past sessions and participants | You see who usually checks in, and from where. |
 | Optional QRZ lookups | Names and grids for calls you don't know yet. |
@@ -43,7 +43,7 @@ Beam Navigator should help attendees and net controllers have a better, more pro
 
 | Feature | What it does for you |
 |---|---|
-| The rotator moves only when you press Rotate, Snap back to controller or Stop (or their keys); new rotators start in simulation | No surprises at the tower. |
+| The rotator moves only when you press Rotate, Rotate to net control or Stop (or their keys); new rotators start in simulation | No surprises at the tower. |
 | Works with no internet connection | Nothing stops when the network does. |
 | Backup and restore to one file | Your stations, nets and history are safe and can move to a new computer. |
 
@@ -154,17 +154,23 @@ Example nets are labelled **Example — unverified**. When you have checked one,
 
 ## Following a net (live net screen)
 
-Open a session to follow the net.
+Open a session to follow the net. The **Beam** panel is on the left (at the top on a narrow window); everything you pick from is on the right.
 
-- **You → controller** is where you point to work net control. **Controller → you** is where the controller must point to hear you, with its sector. It is worked out directly from the controller's location, not by adding 180°.
-- When the controller announces a direction ("anyone to the northeast?"), press its number-pad key (8 N, 9 NE, 6 E, 3 SE, 2 S, 1 SW, 4 W, 7 NW) or click it under **Announced sector: press a direction**. If it is your sector, a large **YOUR SECTOR IS UP** banner appears. It never claims the controller can hear you. If the controller's location is unknown, it says "Controller location unknown — can't tell if this call is for you."
-- **Follow Controller**, **Follow Station** or **Follow Typed** decides what Rotate points at. **Snap back to controller** (or Home) points at net control and turns the beam in one press.
-- **Aim at**: type a callsign, grid, alias or direction (`270`, `W`) and press Enter. The bearing appears and Rotate points there, but nothing turns until you press Rotate (or Ctrl+Enter, which works straight after Enter). While you type, both lists below narrow to matching stations; clear the box to see everyone. A callsign not yet in tonight's list offers **Add to tonight**.
-- **I hear**: the same boxes as the net control entry line (Callsign → Name → Grid → QTH → Report → Notes). Type the callsign of a station you hear, Enter to fill its details from what Beam Navigator knows, Enter again to log it. The station is marked Heard and remembered for the next net. **Direction** beside the line shows which way they are as soon as there is a grid; press **Aim** and Rotate points at them (nothing turns until you press Rotate or Ctrl+Enter).
-- **Substitute controller tonight**: someone else is running the net? Enter their callsign, grid, or a bearing you measured. It applies to this session only.
+**One idea: there is one Target.** Whatever you picked last is the Target, and **Rotate** turns the antenna to it. The Target card always says who it is, which way, and where it came from (Net control, Tonight list, Regulars, Typed or I hear). Clicking, typing and pressing Enter never move the antenna; only **Rotate** (Ctrl+Enter) and **Rotate to net control** (Home) do. If Rotate is greyed out, the sentence under it says why.
+
+- **Net control** at the top shows who is running the net and your bearing and distance to them, with a button to fix it:
+  - **Change…** when it is known;
+  - **Add grid…** when only the callsign is known ("location unknown");
+  - **Set net control…** when the net has none ("not set").
+
+  The dialog takes a callsign, grid, or a bearing you measured, and (with a QRZ login) **Get grid from QRZ**. **Use for tonight** changes this session only, for when someone else is running the net. **Save for this net** also makes it the net's net control, so every future session starts with it.
+- **Rotate to net control** (or Home) makes net control the Target and turns the beam in one press.
+- **Net control is calling**: when the controller announces a direction ("anyone to the northeast?"), press its number-pad key (8 N, 9 NE, 6 E, 3 SE, 2 S, 1 SW, 4 W, 7 NW) or click it. If it is your sector, a large **YOUR SECTOR IS UP** banner appears. It is worked out from net control's location directly, not by adding 180°, and it never claims the controller can hear you. If net control's location is unknown, it says "Controller location unknown — can't tell if this call is for you."
+- **Find or point at**: type a callsign, grid, alias or direction (`270`, `W`) and press Enter. The bearing appears and it becomes the Target ("Typed"), but nothing turns until you press Rotate (or Ctrl+Enter, which works straight after Enter). While you type, both lists below narrow to matching stations; clear the box to see everyone. A callsign not yet in tonight's list offers **Add to tonight**.
+- **I hear**: the same boxes as the net control entry line (Callsign → Name → Grid → QTH → Report → Notes). Type the callsign of a station you hear, Enter to fill its details from what Beam Navigator knows, Enter again to log it. The station is marked Heard and remembered for the next net. **Direction** shows which way they are as soon as there is a grid; **Aim to <call>** makes them the Target (nothing turns until you press Rotate or Ctrl+Enter).
 - Mark each station **Heard**, **Weak**, **Not heard** or **Via relay**. These are private to you.
 - **Tonight** lists the stations in this session; sort it by **Check-in order**, **Callsign**, **Direction** or **Distance**.
-- **Regulars not heard yet** lists everyone who has checked in to this net before, with bearing, distance, attendance and last check-in. Sort by **Last check-in**, **Callsign**, **Grid** or **Direction**. Click a regular to point Rotate at them; press **Heard** to add them to tonight.
+- **Regulars not heard yet** lists everyone who has checked in to this net before, with bearing, distance, attendance and last check-in. Sort by **Last check-in**, **Callsign**, **Grid** or **Direction**. Click a regular to make them the Target; press **Heard** to add them to tonight.
 - **Close my session…** when the net ends. Add **Notes for next time** ("K3WGR weak from 40°, try 30°") and they appear as **Last time** at the top of the next session of this net, on both screens. A closed session is read-only, but you can still aim and rotate; **Reopen** makes it editable again. Closing notes are private: they are never exported.
 
 ## Running a net (net control)
@@ -210,7 +216,7 @@ With **Look up calls automatically when nothing is saved for them** on, a callsi
 | Action | Default key |
 |---|---|
 | Rotate to the target | Ctrl+Enter |
-| Snap back to net control | Home |
+| Rotate to net control | Home |
 | Announce sector N | Numpad 8 |
 | Announce sector NE | Numpad 9 |
 | Announce sector E | Numpad 6 |
@@ -220,7 +226,7 @@ With **Look up calls automatically when nothing is saved for them** on, a callsi
 | Announce sector W | Numpad 4 |
 | Announce sector NW | Numpad 7 |
 
-The sector keys and Snap back work on the live net screen. These keys do nothing while you are typing in a box.
+The sector keys and Rotate to net control work on the live net screen. These keys do nothing while you are typing in a box.
 
 ### Net control entry line
 
@@ -236,7 +242,7 @@ The sector keys and Snap back work on the live net screen. These keys do nothing
 
 ### Changing a key
 
-In Settings → Keys, press **Change** next to an action, then press the new key; Escape cancels. **Reset** puts one back, **Reset all keys** puts them all back. Some keys are refused, with the reason: keys the browser keeps for itself (such as Ctrl+W, Ctrl+N or F5), a key already used in the same group, and keys that would type a character on the entry line. Keys that move the rotator (Rotate and Snap back) need Ctrl or Alt, or a key that never types, such as F9, Home or a number-pad key. Space always moves on from Callsign and Grid. If you change keys while the net control screen is open, reload that page to use them.
+In Settings → Keys, press **Change** next to an action, then press the new key; Escape cancels. **Reset** puts one back, **Reset all keys** puts them all back. Some keys are refused, with the reason: keys the browser keeps for itself (such as Ctrl+W, Ctrl+N or F5), a key already used in the same group, and keys that would type a character on the entry line. Keys that move the rotator (Rotate and Rotate to net control) need Ctrl or Alt, or a key that never types, such as F9, Home or a number-pad key. Space always moves on from Callsign and Grid. If you change keys while the net control screen is open, reload that page to use them.
 
 ## Backup and restore
 

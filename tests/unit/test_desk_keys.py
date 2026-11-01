@@ -30,7 +30,7 @@ def test_set_key_stores_only_the_override(desk: Desk) -> None:
 
 
 def test_set_key_refused_keeps_the_old_binding(desk: Desk) -> None:
-    with pytest.raises(ValueError, match="already used for Snap back to net control"):
+    with pytest.raises(ValueError, match="already used for Rotate to net control"):
         desk.set_key("rotate", parse_chord("Home"))
     assert desk.keymap()["rotate"] == DEFAULTS["rotate"]
     with pytest.raises(ValueError, match="Unknown action nonsense."):
@@ -71,7 +71,7 @@ def test_two_step_swap_is_kept(desk: Desk) -> None:  # final review C2
 def test_reset_refused_when_it_would_clash(desk: Desk) -> None:
     desk.set_key("rotate", parse_chord("F9"))
     desk.set_key("snap_back", parse_chord("Ctrl+Enter"))
-    with pytest.raises(ValueError, match=r"Ctrl\+Enter is already used for Snap back"):
+    with pytest.raises(ValueError, match=r"Ctrl\+Enter is already used for Rotate to net control"):
         desk.reset_key("rotate")
     assert stored(desk.keymap()["rotate"]) == "F9"
 

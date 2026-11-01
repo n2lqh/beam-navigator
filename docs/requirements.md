@@ -101,19 +101,20 @@ Parser requirements:
 
 ### 4.4 Live net screen (participant)
 
-- Header: net, frequency, effective controller, rotator status.
-- Pinned controller row with two clearly labeled values: **"You → controller: NNN°"** and **"Controller → you: NNN° (sector)."** The second is calculated directly from controller to user, not by adding 180°.
+- **One Target (owner, 2026-11-01; decision 46).** Whatever was picked last is the Target: net control when the screen opens, a Tonight or Regulars row, Enter in Find or point at, or Aim on the I-hear line. A **Target** card always says who, which way, and where it came from. **Rotate** turns to it; when Rotate can't, a sentence says why. There is no Follow mode.
+- Two columns on a wide window: the **Beam** panel (Target, Rotate, Rotate to net control, rotator, compass), then everything to pick from.
+- Header: net, frequency, and one **Net control** line: `Net control: CALL · NNN.N° X · distance` with **Change…**, `CALL — location unknown` with **Add grid…**, or `not set` with **Set net control…**. Controller → user is calculated directly from controller to user, not by adding 180°, and is used by the announced-sector check.
 - Check-in table: callsign, name, grid, bearing from user, distance, heard state. Sort by roster order, bearing, distance or callsign. Filter by text.
 - **Announced sector:** the user records the controller's announced sector with one key (number-pad layout: 8 N, 9 NE, 6 E, 3 SE, 2 S, 1 SW, 4 W, 7 NW) or by clicking a compass rose. When it matches the user's sector as seen from the controller (default tolerance ±22.5°), a large banner shows **"YOUR SECTOR IS UP."** If the controller location is unknown: "Controller location unknown — can't tell if this call is for you." The banner never claims the controller can hear the user.
-- **Target mode:** Follow Controller or Follow Station. The mode decides what Rotate points at. A **Snap back to controller** button and hotkey (`Home`) target the controller and rotate in one explicit press.
+- A **Rotate to net control** button and hotkey (`Home`) make net control the Target and rotate in one explicit press.
 - **Heard state** per row: Heard / Weak / Not heard / Via relay (with relaying callsign). Private to the user.
-- **Substitute controller tonight:** enter a different callsign, grid, or just a manually measured bearing. Applies to this session only.
+- **Net control dialog:** a callsign, grid, or just a manually measured bearing, with **Get grid from QRZ** (only on that press, only with a QRZ login). **Use for tonight** applies to this session only. **Save for this net** also sets the net's default net control, so new sessions start with it.
 - **Works without a roster (owner, 2026-10-30; decision 42).** A participant usually has no roster during the net:
-  - **Aim at:** one box takes a callsign, grid, alias or direction, resolved as on the dashboard. Enter shows the bearing and makes it the Rotate target ("Follow Typed") but never rotates; Ctrl+Enter or Rotate then turns the beam. While typing, the box also filters both lists by callsign, name or grid. A typed callsign not yet in tonight's list offers **Add to tonight**, which puts it on the I-hear line.
-  - **Regulars not heard yet:** everyone who has checked in to this net before and is not in tonight's list, with name, grid, bearing and distance from the user, attendance and last check-in. Sort by **Last check-in** (default, newest first), **Callsign**, **Grid** or **Direction**; unknown grids and bearings sort last, ties by callsign. Clicking a row makes it the Rotate target. **Heard** adds the station to tonight.
+  - **Find or point at:** one box takes a callsign, grid, alias or direction, resolved as on the dashboard. Enter shows the bearing and makes it the Target ("Typed") but never rotates; Ctrl+Enter or Rotate then turns the beam. While typing, the box also filters both lists by callsign, name or grid. A typed callsign not yet in tonight's list offers **Add to tonight**, which puts it on the I-hear line.
+  - **Regulars not heard yet:** everyone who has checked in to this net before and is not in tonight's list, with name, grid, bearing and distance from the user, attendance and last check-in. Sort by **Last check-in** (default, newest first), **Callsign**, **Grid** or **Direction**; unknown grids and bearings sort last, ties by callsign. Clicking a row makes it the Target. **Heard** adds the station to tonight.
   - **Tonight** sorts by **Check-in order** (default), **Callsign**, **Direction** or **Distance**. The separate Filter box and the general Sort select are gone.
-  - **I hear:** Callsign → Name → Grid → QTH → Report → Notes, the net control entry line itself (same keys, auto-fill, partial-call matching, duplicate check, session-only or update-record choice, QRZ). Each station is logged to this session as Heard, so it is a regular at the next session. Beside the line, **Direction** shows the bearing and distance to the station (the grid typed there, else its saved grid), and **Aim** makes it the Rotate target ("Follow Typed") without rotating (decision 43).
-  - **Close my session…** with **Notes for next time**. The session turns read-only (Aim at, Rotate and Snap back still work) until **Reopen**. The next session of the same net shows the notes as **Last time (date)** on the live net and net control screens; a newest closed session with no notes shows no card. Closing notes are private and never exported.
+  - **I hear:** Callsign → Name → Grid → QTH → Report → Notes, the net control entry line itself (same keys, auto-fill, partial-call matching, duplicate check, session-only or update-record choice, QRZ). Each station is logged to this session as Heard, so it is a regular at the next session. Beside the line, **Direction** shows the bearing and distance to the station (the grid typed there, else its saved grid), and **Aim to <call>** makes it the Target ("I hear") without rotating (decision 43).
+  - **Close my session…** with **Notes for next time**. The session turns read-only (Find or point at, Rotate, Rotate to net control and Use for tonight still work) until **Reopen**. The next session of the same net shows the notes as **Last time (date)** on the live net and net control screens; a newest closed session with no notes shows no card. Closing notes are private and never exported.
 
 ### 4.5 Net controller screen
 
@@ -212,7 +213,7 @@ A command-line script: `beamnav-rotor --adapter pstrotator --host 127.0.0.1 --po
 Maidenhead, geometry, target resolver with shortcodes and region centroids, roster parser, SQLite store with migrations, simulation adapter, all three fixtures passing. Command-line entry: `beamnav bearing FN20ok`, `beamnav parse roster.txt`.
 
 **Milestone 2 — Usable at the desk.**
-Web UI: bearing lookup, roster import and review, live net screen with announced sector and Follow/Snap back, rotator settings, live Rotate through the adapters from milestone 0.
+Web UI: bearing lookup, roster import and review, live net screen with announced sector and Rotate to net control, rotator settings, live Rotate through the adapters from milestone 0.
 
 **Milestone 3 — Net control.**
 Controller entry line, info panel, partial-call matching, duplicates, export. Nets list, history, participants, `*.beamnet.json`.
@@ -275,7 +276,7 @@ Parser rules these fixtures add:
 ### Live net
 16. W2KV at FN20ok, user at FM29pt: controller → user ≈ 174° (S). Pressing number-pad `2` (S) shows "YOUR SECTOR IS UP" within one second.
 17. Unknown controller location: any sector shows the "can't tell" message and no banner.
-18. Changing sector, mode, or selected row sends zero rotator commands. Snap back sends exactly one.
+18. Changing sector or the Target sends zero rotator commands. Rotate to net control sends exactly one.
 
 ### Net control
 19. Known callsign + `Space` auto-fills name, grid, QTH in history style and shows previous notes.
@@ -299,11 +300,11 @@ Parser rules these fixtures add:
 33. A 100-station roster parses and calculates in under 2 seconds.
 
 ### Participant (owner, 2026-10-30)
-37. Typing a callsign, grid, alias or heading in Aim at and pressing Enter shows its bearing from the user and sends no rotator command.
+37. Typing a callsign, grid, alias or heading in Find or point at and pressing Enter shows its bearing from the user and sends no rotator command.
 38. After that, Ctrl+Enter rotates to the typed target with exactly one command.
 39. Clicking a Regulars row or pressing its Heard button sends no rotator command.
 40. Regulars sort by callsign, grid, direction and last check-in; stations with an unknown grid or bearing sort last.
-41. Typing in Aim at narrows both lists and sends no rotator command. Tonight sorts by check-in order, callsign, direction and distance.
+41. Typing in Find or point at narrows both lists and sends no rotator command. Tonight sorts by check-in order, callsign, direction and distance.
 42. A station added with the I-hear line on one session appears under Regulars on the next session of the same net, with its grid and bearing.
 43. Adding a station whose name or grid differs from its record leaves the record unchanged unless "Update station record" is chosen.
 44. Closing a session with notes stores them; the next session of that net shows them under "Last time"; a different net does not.

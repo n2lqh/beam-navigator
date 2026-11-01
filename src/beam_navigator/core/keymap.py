@@ -55,7 +55,7 @@ class Action:
 
 ACTIONS: tuple[Action, ...] = (
     Action("rotate", "screen", "Rotate to the target", Chord("Enter", ctrl=True)),
-    Action("snap_back", "screen", "Snap back to net control", Chord("Home")),
+    Action("snap_back", "screen", "Rotate to net control", Chord("Home")),
     *(Action(f"sector_{sector}", "screen", f"Announce sector {sector}", Chord(code))
       for code, sector in NUMPAD_SECTORS.items()),
     Action("next", "entry", "Next field", Chord("Tab")),

@@ -44,7 +44,7 @@ def test_enter_matches_numpad_enter() -> None:
 @pytest.mark.parametrize(
     ("action", "text", "message"),
     [
-        ("rotate", "Home", "Home is already used for Snap back to net control."),
+        ("rotate", "Home", "Home is already used for Rotate to net control."),
         ("log", "KeyL", "L types a character, so it can't be an entry-line key."),
         ("log", "Space", "Space types a character, so it can't be an entry-line key."),
         ("rotate", "Tab", "Tab moves between buttons; choose another key."),

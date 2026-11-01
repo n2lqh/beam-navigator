@@ -70,8 +70,8 @@ def test_windows_data_folder() -> None:
 
 @pytest.mark.parametrize(
     "text",
-    ["You → controller", "Controller → you", "YOUR SECTOR IS UP", "Snap back to controller",
-     "Substitute controller tonight"],
+    ["YOUR SECTOR IS UP", "Rotate to net control", "Find or point at", "Use for tonight",
+     "Save for this net", "Set net control…", "Add grid…"],
 )  # fmt: skip
 def test_live_net_labels(text: str) -> None:
     assert text in GUIDE and text in SOURCE
@@ -85,6 +85,6 @@ def test_live_switch_named_as_shown() -> None:
 
 
 def test_safety_promise_names_every_move() -> None:
-    # Final review I2: Snap back moves the rotator too.
+    # Final review I2: Rotate to net control (once Snap back) moves the rotator too.
     promise = next(line for line in GUIDE.splitlines() if "No surprises at the tower" in line)
-    assert "Rotate" in promise and "Snap back" in promise
+    assert "Rotate," in promise and "Rotate to net control" in promise

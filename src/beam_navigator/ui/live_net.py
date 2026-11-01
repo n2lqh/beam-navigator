@@ -55,7 +55,7 @@ BLUR_ACTIVE = "() => document.activeElement && document.activeElement.blur()"
 # selecting rebuilds the table, which would close the select's menu as it opens.
 # Clicks on a row's own button (Heard) are that button's, not the row's.
 ROW_CLICK = "(e) => { if (!(e.target.closest('.q-field') || e.target.closest('.q-btn'))) emit(e) }"
-# Enter in Aim at looks the text up, then leaves the box so Ctrl+Enter rotates next.
+# Enter in Find or point at looks the text up, then leaves the box so Ctrl+Enter rotates next.
 AIM_ENTER = "(e) => { emit(); e.target.blur() }"
 
 
@@ -121,7 +121,7 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                                 callsign=state.callsign, typed=state.typed))  # fmt: skip
 
     def snap_back() -> None:
-        """Snap back to controller: target the controller and rotate, one press."""
+        """Rotate to net control: make net control the Target and rotate, one press."""
         pick("controller", NET_CONTROL)
         if state.rotator_id is not None:
             stop_watching()
