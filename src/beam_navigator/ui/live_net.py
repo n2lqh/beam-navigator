@@ -45,6 +45,7 @@ NET_CONTROL, TONIGHT, REGULARS, TYPED, I_HEAR = (
 NO_TARGET = "No target yet — pick a station"
 NO_LOCATION = "The target has no location: pick another station or type a grid."
 NO_ROTATOR_SET_UP = "No rotator set up: Settings → Rotators."
+NO_NET_CONTROL = "Set net control at the top, or pick a station."
 
 
 # A clicked button keeps focus, and ui.keyboard ignores keys while a button has focus
@@ -336,7 +337,9 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
 
         header()
 
-        with ui.element("div").classes("flex flex-col md:flex-row gap-6 w-full items-start"):
+        with ui.element("div").classes(
+            "flex flex-col md:flex-row flex-nowrap gap-6 w-full items-start"
+        ):
             # Beam panel: the Target, Rotate and the rotator; stays in view on a wide window.
             with ui.column().classes(
                 "gap-2 w-full md:w-96 shrink-0 md:sticky md:top-4"
@@ -370,7 +373,7 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                     if chosen is None:
                         reason = (view.rotate_reason if rotators else None) or NO_ROTATOR_SET_UP
                     elif aim_at is None:
-                        reason = NO_TARGET if state.mode == "controller" else NO_LOCATION
+                        reason = NO_NET_CONTROL if state.mode == "controller" else NO_LOCATION
                     if reason is not None:
                         ui.label(reason).classes("text-grey").mark("rotate-reason")
                     ui.label("Ctrl+Enter").classes("text-caption")
@@ -414,7 +417,7 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                 banner = ui.label("Press the direction net control is calling").mark("banner")
 
             # Everything you pick from.
-            with ui.column().classes("gap-2 grow min-w-0"):
+            with ui.column().classes("gap-2 grow basis-0 min-w-0 w-full"):
                 ui.label("Find or point at").classes("text-overline")
                 # Also the filter for both lists (owner, 2026-10-30).
                 with ui.row().classes("items-center gap-4 w-full"):
@@ -564,14 +567,16 @@ class _ControllerDialog:
         self.live, self.session_id, self.qrz, self.refresh = live, session_id, qrz, refresh
         with ui.dialog() as self.dialog, ui.card().mark("controller-dialog"):
             ui.label("Net control").classes("text-lg")
-            self.call = ui.input("Callsign").mark("nc-call")
+            self.call = ui.input("Callsign").classes("w-64").mark("nc-call")
             with ui.row().classes("items-center gap-2"):
-                self.grid = ui.input("Grid").mark("nc-grid")
+                self.grid = ui.input("Grid").classes("w-64").mark("nc-grid")
                 if qrz is not None:
                     ui.button("Get grid from QRZ", on_click=self.from_qrz).props(
                         "flat dense"
                     ).mark("nc-qrz")
-            self.bearing = ui.input("Measured bearing, ° (optional)").mark("nc-bearing")
+            self.bearing = ui.input("Measured bearing, ° (optional)").classes("w-64").mark(
+                "nc-bearing"
+            )
             ui.label(
                 "Use for tonight changes this session only. Save for this net also makes "
                 "it the net's net control for future sessions."
