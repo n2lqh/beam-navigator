@@ -33,6 +33,23 @@ class ControllerView:
     controller_to_you: str | None = None
     bearing_deg: float | None = None
     controller_to_you_deg: float | None = None
+    toward: Bearing | None = None  # you → controller, with distance
+
+
+def controller_line(controller: ControllerView) -> tuple[str, str]:
+    """The header's net control line and its button (owner, 2026-11-01): never a bare
+    "unknown" without a way to fix it."""
+    call = controller.callsign
+    if controller.source == "measured bearing" and controller.bearing_deg is not None:
+        deg = controller.bearing_deg
+        return f"Net control: {call or 'call unknown'} · {deg:.1f}° (measured)", "Change…"
+    toward = controller.toward
+    if toward is not None:
+        label = call or "call unknown"
+        return f"Net control: {label} · {toward.text} · {toward.distance_text}", "Change…"
+    if call is None:
+        return "Net control: not set", "Set net control…"
+    return f"Net control: {call} — location unknown", "Add grid…"
 
 
 @dataclass(frozen=True)
@@ -176,6 +193,20 @@ class LiveNet:
             raise ValueError("Give a callsign, a grid or a measured bearing.")
         self.nets.set_session_controller(session_id, call, clean_grid, bearing=bearing)
 
+    def set_controller(
+        self,
+        session_id: int,
+        callsign: str | None,
+        grid: str | None,
+        bearing: float | None,
+        *,
+        save_for_net: bool,
+    ) -> None:
+        """Use for tonight, or Save for this net: future sessions start with it too."""
+        self.set_substitute(session_id, callsign, grid, bearing)
+        if save_for_net:
+            self.nets.save_controller_as_default(session_id)
+
     def target(
         self,
         session_id: int,
@@ -277,6 +308,7 @@ class LiveNet:
             f"Controller → you: {back:.1f}° ({sector_name(back)})",
             None if toward is None else toward.deg,
             back,
+            toward,
         )
 
     def _grid(self, callsign: str, snapshot: str | None) -> tuple[str | None, str]:

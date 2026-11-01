@@ -11,7 +11,14 @@ from beam_navigator.core.models import Net, OperatorProfile, RotatorProfile, Sta
 from beam_navigator.core.roster_parser import parse_roster
 from beam_navigator.core.sector import CANT_TELL, SECTOR_UP, SECTORS
 from beam_navigator.desk import Desk
-from beam_navigator.live_net import LiveNet, RegularRow, filter_rows, sort_regulars, sort_rows
+from beam_navigator.live_net import (
+    LiveNet,
+    RegularRow,
+    controller_line,
+    filter_rows,
+    sort_regulars,
+    sort_rows,
+)
 from beam_navigator.rotators.service import RotateService
 from beam_navigator.rotators.simulation import SimulationAdapter
 from beam_navigator.store.db import open_db
@@ -330,3 +337,61 @@ def test_heard_aim_uses_typed_grid_else_record(
     assert live.heard_aim("K9ZZZ", "") is None  # no grid anywhere: nothing to aim at
     assert live.heard_aim("", "FN20") is None
     assert sim.commands == []
+
+
+# Participant screen redesign (owner, 2026-11-01) ------------------------------------------
+
+
+def test_controller_line_states(conn: sqlite3.Connection, live: LiveNet, w2kv: int) -> None:
+    nets = NetRepository(conn)
+    session = nets.start_session(add_net(conn, "Test"), "2026-11-02").id
+    assert controller_line(live.view(session).controller) == (
+        "Net control: not set", "Set net control…"
+    )
+    live.set_substitute(session, "K9ZZZ", None, None)
+    assert controller_line(live.view(session).controller) == (
+        "Net control: K9ZZZ — location unknown", "Add grid…"
+    )
+    live.set_substitute(session, None, None, 200.0)  # a measured bearing, no call
+    assert controller_line(live.view(session).controller) == (
+        "Net control: call unknown · 200.0° (measured)", "Change…"
+    )
+    live.set_substitute(session, None, "FN20ok", None)  # a grid, no call
+    assert controller_line(live.view(session).controller)[0].startswith(
+        "Net control: call unknown · "
+    )
+    text, button = controller_line(live.view(w2kv).controller)
+    assert text.startswith("Net control: W2KV · 354.") and text.endswith(" mi")
+    assert " N · " in text and button == "Change…"
+
+
+def test_set_controller_tonight_leaves_net(conn: sqlite3.Connection, live: LiveNet) -> None:
+    nets = NetRepository(conn)
+    net_id = add_net(conn, "Test")
+    session = nets.start_session(net_id, "2026-11-02").id
+    live.set_controller(session, "kd8ud", "FM19", None, save_for_net=False)
+    assert nets.get_session(session).controller_call == "KD8UD"
+    assert nets.get_net(net_id).default_controller_call is None
+
+
+def test_save_for_net_starts_next_session_with_it(
+    conn: sqlite3.Connection, live: LiveNet
+) -> None:
+    nets = NetRepository(conn)
+    net_id = add_net(conn, "Test")
+    session = nets.start_session(net_id, "2026-11-02").id
+    live.set_controller(session, "kd8ud", "FM19", None, save_for_net=True)
+    net = nets.get_net(net_id)
+    assert (net.default_controller_call, net.default_controller_grid) == ("KD8UD", "FM19")
+    later = nets.start_session(net_id, "2026-11-09")
+    assert (later.controller_call, later.controller_grid) == ("KD8UD", "FM19")
+
+
+def test_save_for_net_on_closed_session(conn: sqlite3.Connection, live: LiveNet, w2kv: int) -> None:
+    nets = NetRepository(conn)
+    before = nets.checkins(w2kv)
+    nets.close_session(w2kv, "")
+    live.set_controller(w2kv, "KD8UD", "FM19", None, save_for_net=True)
+    assert nets.get_session(w2kv).status == "closed"
+    assert nets.checkins(w2kv) == before
+    assert nets.get_net(nets.get_session(w2kv).net_id).default_controller_call == "KD8UD"
