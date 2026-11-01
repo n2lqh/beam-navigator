@@ -76,11 +76,13 @@ async def open_net(user: User, desk: Desk, session_id: int) -> None:
     await user.open(f"/net/{session_id}")
 
 
-async def test_live_net_shows_controller_both_ways(user: User, desk: Desk, w2kv: int) -> None:
+async def test_header_names_net_control_with_bearing(
+    user: User, desk: Desk, w2kv: int
+) -> None:  # redesign: one line, with a way to change it
     await open_net(user, desk, w2kv)
-    await user.should_see("You → controller: 35")
-    await user.should_see("Controller → you: 17")
-    await user.should_see("(S)")
+    await user.should_see("Net control: W2KV · 354")
+    await user.should_see(marker="net-control-change")
+    await user.should_see("Change…")
     await user.should_see("Rotate VHF to 35")
 
 
@@ -100,23 +102,83 @@ async def test_unknown_controller(user: User, desk: Desk, conn: sqlite3.Connecti
     await user.should_not_see(SECTOR_UP)
 
 
-async def test_selection_mode_sector_send_nothing_snap_back_one(
+async def test_row_click_and_sectors_send_nothing_snap_back_one(
     user: User, desk: Desk, w2kv: int, conn: sqlite3.Connection, sim: SimulationAdapter
-) -> None:  # acceptance 18
+) -> None:  # acceptance 18, without a Follow toggle
     await open_net(user, desk, w2kv)
     first = NetRepository(conn).checkins(w2kv)[3]
     user.find(marker=f"row-{first.id}").click()
-    [mode] = user.find(marker="mode").elements
-    assert isinstance(mode, ui.toggle)
-    mode.set_value("station")
-    await user.should_see("Rotate VHF to")
-    mode.set_value("controller")
+    await user.should_see(f"({first.callsign})")
+    await user.should_see("from: Tonight list")
     for sector in ("N", "S", "E"):
         user.find(marker=f"sector-{sector}").click()
     assert sim.commands == []
     user.find(marker="snap-back").click()
     await user.should_see("Simulated:")
+    await user.should_see("from: Net control")
     assert len(sim.commands) == 1
+
+
+async def test_no_follow_toggle(user: User, desk: Desk, w2kv: int) -> None:
+    await open_net(user, desk, w2kv)
+    await user.should_see("Rotate to net control")
+    await user.should_not_see("Follow")
+    await user.should_not_see(marker="mode")
+    await user.should_not_see("Snap back")
+
+
+async def test_target_card_follows_picks(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:  # behaviour rules 1 and 2: each pick sets the Target and sends nothing
+    tonight = tonight_after(conn, w2kv)
+    await open_net(user, desk, tonight)
+    await user.should_see("No target yet — pick a station")  # this net has no net control
+    user.find(marker="regular-W2KV").click()
+    await user.should_see("from: Regulars")
+    user.find(marker="aim").type("FN20").trigger("keydown.enter")
+    await user.should_see("from: Typed")
+    user.find(marker="entry-callsign").type("K9ZZZ")
+    user.find(marker="entry-grid").type("FN20")
+    await user.should_see("Aim to K9ZZZ")
+    user.find(marker="i-hear-aim").click()
+    await user.should_see("from: I hear")
+    await user.should_see("(K9ZZZ)")
+    assert sim.commands == []
+
+
+async def test_only_the_target_row_is_highlighted(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int
+) -> None:  # Review Focus 4
+    await open_net(user, desk, w2kv)
+    first = NetRepository(conn).checkins(w2kv)[0]
+    user.find(marker=f"row-{first.id}").click()
+    await user.should_see("from: Tonight list")
+    [row] = user.find(marker=f"row-{first.id}").elements
+    assert "bg-blue-1" in row.classes
+    user.find(marker="entry-callsign").type("K9ZZZ")  # the Aim box would filter row 1 out
+    user.find(marker="entry-grid").type("FN20")
+    await user.should_see("Aim to K9ZZZ")
+    user.find(marker="i-hear-aim").click()
+    await user.should_see("from: I hear")
+    [row] = user.find(marker=f"row-{first.id}").elements
+    assert "bg-blue-1" not in row.classes
+
+
+async def test_not_set_offers_set_net_control(
+    user: User, desk: Desk, conn: sqlite3.Connection
+) -> None:  # the owner's Mud Toads net
+    session = NetRepository(conn).start_session(add_net(conn, "Mud Toads", "2 m"), "2026-11-02")
+    await open_net(user, desk, session.id)
+    await user.should_see("Net control: not set")
+    await user.should_see("Set net control…")
+    await user.should_see("No target yet — pick a station")
+    await user.should_see(marker="rotate-reason")
+
+
+def fill(user: User, marker: str, value: str) -> None:
+    [field] = user.find(marker=marker).elements
+    assert isinstance(field, ui.input)
+    field.set_value(value)
 
 
 async def test_new_session_shows_expected(
@@ -134,20 +196,46 @@ async def test_new_session_shows_expected(
     assert [(s.date, count) for s, count in sessions][0] == ("2026-11-02", 0)
 
 
-async def test_substitute_tonight_only(
+async def test_use_for_tonight_leaves_net(
     user: User, desk: Desk, w2kv: int, w2kv_net: int, conn: sqlite3.Connection
 ) -> None:  # acceptance 15
     await open_net(user, desk, w2kv)
-    user.find("Substitute controller").click()
-    for marker, value in (("sub-call", "K2XYZ"), ("sub-grid", "FM29jw")):
-        [field] = user.find(marker=marker).elements
-        assert isinstance(field, ui.input)
-        field.set_value(value)
-    user.find("Apply for tonight").click()
-    await user.should_see("Controller: K2XYZ")
+    user.find(marker="net-control-change").click()
+    [call] = user.find(marker="nc-call").elements
+    assert isinstance(call, ui.input) and call.value == "W2KV"  # opens with tonight's values
+    fill(user, "nc-call", "K2XYZ")
+    fill(user, "nc-grid", "FM29jw")
+    user.find(marker="nc-tonight").click()
+    await user.should_see("Net control: K2XYZ")
     assert NetRepository(conn).get_session(w2kv).controller_call == "K2XYZ"
-    net = NetRepository(conn).get_net(w2kv_net)
-    assert net.default_controller_call is None  # created without one; still untouched
+    assert NetRepository(conn).get_net(w2kv_net).default_controller_call is None
+
+
+async def test_save_for_net_sets_default(
+    user: User, desk: Desk, conn: sqlite3.Connection
+) -> None:  # behaviour rule 6
+    nets = NetRepository(conn)
+    net_id = add_net(conn, "Mud Toads", "2 m")
+    session = nets.start_session(net_id, "2026-11-02")
+    await open_net(user, desk, session.id)
+    user.find(marker="net-control-change").click()
+    fill(user, "nc-call", "kd8ud")
+    fill(user, "nc-grid", "FM19")
+    user.find(marker="nc-save").click()
+    await user.should_see("Net control: KD8UD · ")
+    net = nets.get_net(net_id)
+    assert (net.default_controller_call, net.default_controller_grid) == ("KD8UD", "FM19")
+
+
+async def test_bad_grid_keeps_dialog_open(
+    user: User, desk: Desk, w2kv: int, conn: sqlite3.Connection
+) -> None:
+    await open_net(user, desk, w2kv)
+    user.find(marker="net-control-change").click()
+    fill(user, "nc-grid", "ZZ99")
+    user.find(marker="nc-save").click()
+    await user.should_see(marker="nc-call")
+    assert NetRepository(conn).get_session(w2kv).controller_grid != "ZZ99"
 
 
 def press(user: User, code: str, key: str, ctrl: bool = False, repeat: bool = False) -> None:
@@ -239,7 +327,7 @@ async def test_heard_select_click_does_not_reach_the_row(
 async def test_controls_give_focus_back_to_hotkeys(user: User, desk: Desk, w2kv: int) -> None:
     # final review I4: after clicking these, Home and Ctrl+Enter must still work
     await open_net(user, desk, w2kv)
-    for marker in ("mode", "substitute", "rotator", "tonight-sort", "regular-sort"):
+    for marker in ("net-control-change", "rotator", "tonight-sort", "regular-sort"):
         [element] = user.find(marker=marker).elements
         assert has_js_listener(element, "click", "blur") or has_js_listener(
             element, "update:model-value", "blur"

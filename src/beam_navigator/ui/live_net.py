@@ -1,27 +1,31 @@
-"""The live net screen (requirements 4.4). Only Rotate, Snap back
-and Stop reach the rotator (invariant 2); everything else here only reads or records."""
+"""The live net screen (requirements 4.4). One Target: whatever was picked last. Only
+Rotate and Rotate to net control reach the rotator (invariant 2); everything else here
+only reads or records."""
 
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from nicegui import events, ui
+from nicegui import events, run, ui
 
 from beam_navigator.core.callsign import is_callsign, normalize_callsign
 from beam_navigator.core.maidenhead import is_grid
+from beam_navigator.core.sector import sector_name
 from beam_navigator.desk import Bearing
 from beam_navigator.hotkeys import action_for
 from beam_navigator.live_net import (
     LiveNet,
+    LiveNetView,
     Mode,
     RegularSort,
     SortKey,
+    controller_line,
     filter_rows,
     sort_regulars,
     sort_rows,
 )
 from beam_navigator.net_control import Entry, NetControl
-from beam_navigator.qrz_client import QrzClient
+from beam_navigator.qrz_client import QrzClient, QrzError
 from beam_navigator.rotators.service import RotateOutcome
 from beam_navigator.store.repositories import DuplicateCheckIn
 from beam_navigator.ui.entry_line import EntryLine
@@ -34,8 +38,13 @@ TONIGHT_SORTS = {"roster": "Check-in order", "callsign": "Callsign", "bearing": 
                  "distance": "Distance"}  # fmt: skip
 REGULAR_SORTS = {"last": "Last check-in", "callsign": "Callsign", "grid": "Grid",
                  "direction": "Direction"}  # fmt: skip
-MODE_OPTIONS = {"controller": "Follow Controller", "station": "Follow Station",
-                "typed": "Follow Typed"}  # fmt: skip
+# Where the Target came from, in words (redesign, owner 2026-11-01).
+NET_CONTROL, TONIGHT, REGULARS, TYPED, I_HEAR = (
+    "Net control", "Tonight list", "Regulars", "Typed", "I hear"
+)
+NO_TARGET = "No target yet — pick a station"
+NO_LOCATION = "The target has no location: pick another station or type a grid."
+NO_ROTATOR_SET_UP = "No rotator set up: Settings → Rotators."
 
 
 # A clicked button keeps focus, and ui.keyboard ignores keys while a button has focus
@@ -59,7 +68,7 @@ class _State:
     mode: Mode = "controller"
     selected: int | None = None  # a check-in tonight
     callsign: str | None = None  # a regular not heard yet
-    station_mode: Mode = "station"  # which of the two Follow Station last pointed at
+    source: str = NET_CONTROL  # where the Target came from, shown on the Target card
     typed: tuple[str, float] | None = None
     rotator_id: int | None = None
     outcome: RotateOutcome | None = None
@@ -113,11 +122,10 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
 
     def snap_back() -> None:
         """Snap back to controller: target the controller and rotate, one press."""
-        state.mode = "controller"
+        pick("controller", NET_CONTROL)
         if state.rotator_id is not None:
             stop_watching()
             pressed(live.snap_back(session_id, state.rotator_id))
-        mode_toggle.set_value("controller")
 
     def announce(sector: str) -> None:
         result = live.announce(session_id, sector)
@@ -126,26 +134,19 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
             replace="text-4xl font-bold p-4 " + ("text-positive" if result.up else "text-grey")
         )
 
-    def follow(mode: Mode) -> None:
-        state.mode = mode
-        if mode in ("station", "regular"):
-            state.station_mode = mode
-        mode_toggle.set_value("station" if mode in ("station", "regular") else mode)
+    def pick(mode: Mode, source: str) -> None:
+        """Makes something the Target. Never rotates (invariant 2)."""
+        state.mode, state.source = mode, source
         lists.refresh()
         controls.refresh()
 
     def select_row(checkin_id: int) -> None:
         state.selected = checkin_id
-        follow("station")
+        pick("station", TONIGHT)
 
     def select_regular(callsign: str) -> None:
         state.callsign = callsign
-        follow("regular")
-
-    def set_mode(value: str) -> None:
-        mode: Mode = state.station_mode if value == "station" else value  # type: ignore[assignment]
-        if mode != state.mode:
-            follow(mode)
+        pick("regular", REGULARS)
 
     def aim_enter() -> None:
         """Looks the typed text up and makes it the target. Never rotates (invariant 2)."""
@@ -159,7 +160,7 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
         add_tonight.set_visibility(state.aim_call is not None)
         if target is not None:
             state.typed = target
-            follow("typed")
+            pick("typed", TYPED)
         elif state.typed is not None:
             # Never leave Rotate on an earlier typed target while showing this one.
             state.typed = None
@@ -169,7 +170,7 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
         """Aim on the I-hear line: that station becomes the typed target. Never rotates."""
         if found is not None:
             state.typed = (found[0], found[1].deg)
-            follow("typed")
+            pick("typed", I_HEAR)
 
     def add_aimed_tonight() -> None:
         """Puts the typed call on the I-hear line; logging it is still the operator's Enter."""
@@ -196,7 +197,7 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
         ui.notify(f"Logged {callsign}")
         if state.mode == "regular" and state.callsign == callsign:
             state.selected = logged.id  # keep Rotate on them, now in tonight's list
-            follow("station")
+            pick("station", TONIGHT)
         else:
             lists.refresh()
 
@@ -265,7 +266,7 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
         header.refresh()
         lists.refresh()
 
-    sub_dialog = _substitute_dialog(live, session_id, everything)
+    controller_dialog = _ControllerDialog(live, session_id, qrz, everything)
     relay_target: dict[str, int | None] = {"id": None}
 
     def save_relay() -> None:
@@ -301,29 +302,16 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
             ui.button("Save relay", on_click=save_relay)
             ui.button("Cancel", on_click=cancel_relay).props("flat")
 
-    with ui.column().classes("w-full max-w-5xl mx-auto gap-3 p-4"):
+    with ui.column().classes("w-full max-w-7xl mx-auto gap-3 p-4"):
 
         @ui.refreshable
         def header() -> None:
             view = live.view(session_id)
-            ui.label(view.title).classes("text-xl font-bold")
-            with ui.row().classes("gap-6"):
-                ui.link("Net control screen", f"/control/{session_id}")
+            with ui.row().classes("items-center gap-4 w-full"):
+                ui.label(view.title).classes("text-xl font-bold")
                 ui.label(view.frequency)
-                ui.label(f"Controller: {view.controller.callsign or 'unknown'}")
-            if view.last_time is not None:
-                when, notes = view.last_time
-                with ui.card().classes("w-full bg-amber-1").mark("last-time"):
-                    ui.label(f"Last time ({when})").classes("font-bold")
-                    ui.label(notes).classes("whitespace-pre-line")
-            with ui.card().classes("w-full"):
-                ui.label(view.controller.you_to_controller or "You → controller: unknown")
-                ui.label(view.controller.controller_to_you or "Controller → you: unknown")
-                ui.label(f"Location: {view.controller.source}").classes("text-caption")
-            with ui.row().classes("items-center gap-2"):
-                ui.button("Substitute controller tonight", on_click=sub_dialog.open).props(
-                    "flat no-refocus"
-                ).mark("substitute").on("click", js_handler=BLUR)
+                ui.link("Net control screen", f"/control/{session_id}")
+                ui.space()
                 if view.closed:
                     # Read-only, but pointing still works: it records nothing.
                     ui.badge("Closed", color="grey").mark("closed-badge")
@@ -334,207 +322,302 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                     ui.button("Close my session…", on_click=close_dialog.open).props(
                         "flat"
                     ).mark("close-session").on("click", js_handler=BLUR)
+            text, button_label = controller_line(view.controller)
+            with ui.row().classes("items-center gap-2"):
+                ui.label(text).classes("text-lg").mark("net-control")
+                ui.button(button_label, on_click=controller_dialog.open).props(
+                    "flat dense no-refocus"
+                ).mark("net-control-change").on("click", js_handler=BLUR)
+            if view.last_time is not None:
+                when, notes = view.last_time
+                with ui.card().classes("w-full bg-amber-1").mark("last-time"):
+                    ui.label(f"Last time ({when})").classes("font-bold")
+                    ui.label(notes).classes("whitespace-pre-line")
 
         header()
 
-        # Aim at is also the filter for both lists (owner, 2026-10-30).
-        with ui.row().classes("items-center gap-4 w-full"):
-            aim = (
-                ui.input("Aim at: call, grid, alias or direction",
-                         on_change=lambda e: set_filter(e.value))
-                .props("clearable outlined dense").classes("w-80").mark("aim")
-            )  # fmt: skip
-            aim.on("keydown.enter", aim_enter, js_handler=AIM_ENTER)
-            aim_result = ui.label("").mark("aim-result")
-            add_tonight = ui.button("Add to tonight", on_click=add_aimed_tonight).props(
-                "flat dense"
-            ).mark("add-tonight")  # fmt: skip
-            add_tonight.on("click", js_handler=BLUR)
-            add_tonight.set_visibility(False)
+        with ui.element("div").classes("flex flex-col md:flex-row gap-6 w-full items-start"):
+            # Beam panel: the Target, Rotate and the rotator; stays in view on a wide window.
+            with ui.column().classes(
+                "gap-2 w-full md:w-96 shrink-0 md:sticky md:top-4"
+            ).mark("beam"):
+                ui.label("Beam").classes("text-overline")
 
-        mode_toggle = ui.toggle(
-            MODE_OPTIONS, value="controller", on_change=lambda e: set_mode(e.value),
-        ).mark("mode").on("click", js_handler=BLUR_ACTIVE)  # fmt: skip
-
-        @ui.refreshable
-        def controls() -> None:
-            view = live.view(session_id)
-            rotators = desk.rotators()
-            if not rotators or view.rotate_reason and state.rotator_id is None:
-                ui.label(view.rotate_reason or "No rotator configured.").classes("text-grey")
-            if rotators:
-                options = {r.id: r.name for r in rotators if r.id is not None}
-                ui.select(
-                    options, value=state.rotator_id, label="Rotator",
-                    on_change=lambda e: change_rotator(e.value),
-                ).classes("w-48").mark("rotator").on(
-                    "update:model-value", js_handler=BLUR_ACTIVE
-                )  # fmt: skip
-            chosen = next((r for r in rotators if r.id == state.rotator_id), None)
-            aim_at = live.target(session_id, state.mode, state.selected,
-                                 callsign=state.callsign, typed=state.typed)  # fmt: skip
-            label = "Rotate"
-            if chosen is not None and aim_at is not None:
-                label = f"{desk.rotate_label(chosen, aim_at[1])} ({aim_at[0]})"
-                ui.label("Live" if chosen.live else "Simulation").classes("text-caption")
-            with ui.row().classes("gap-2"):
-                rotate_button = ui.button(label, on_click=rotate).props("size=lg").mark("rotate")
-                rotate_button.set_enabled(chosen is not None and aim_at is not None)
-                snap = ui.button("Snap back to controller", on_click=snap_back).mark("snap-back")
-                snap.set_enabled(chosen is not None)
-                for button in (rotate_button, snap):
-                    button.on("click", js_handler=BLUR)
-
-        controls()
-        status = ui.label("").classes("text-lg").mark("status")
-        watcher = ui.timer(1.0, tick, active=False)
-        # Fixed keys (decision 22); ignored while a field or button has focus, no repeats.
-        ui.keyboard(on_key=on_key, repeating=False)
-
-        with ui.row().classes("items-start gap-8"):
-            with ui.grid(columns=3).classes("gap-1"):
-                for line in COMPASS_LAYOUT:
-                    for sector in line:
-                        if sector:
-                            ui.button(sector, on_click=lambda s=sector: announce(s)).mark(
-                                f"sector-{sector}"
-                            ).on("click", js_handler=BLUR)
+                @ui.refreshable
+                def controls() -> None:
+                    view = live.view(session_id)
+                    rotators = desk.rotators()
+                    chosen = next((r for r in rotators if r.id == state.rotator_id), None)
+                    aim_at = live.target(session_id, state.mode, state.selected,
+                                         callsign=state.callsign, typed=state.typed)  # fmt: skip
+                    with ui.card().classes("w-full").mark("target"):
+                        ui.label("Target").classes("text-caption")
+                        if aim_at is not None:
+                            deg = aim_at[1]
+                            ui.label(aim_at[0]).classes("text-3xl font-bold")
+                            ui.label(f"{deg:.1f}° {sector_name(deg)}").classes("text-lg")
+                            ui.label(f"from: {state.source}").classes("text-caption")
                         else:
-                            ui.label("")
-            banner = ui.label("Announced sector: press a direction").mark("banner")
+                            ui.label(_unlocated(view, state)).classes("text-lg")
+                    label = "Rotate"
+                    if chosen is not None and aim_at is not None:
+                        label = f"{desk.rotate_label(chosen, aim_at[1])} ({aim_at[0]})"
+                    rotate_button = ui.button(label, on_click=rotate).props("size=lg").classes(
+                        "w-full"
+                    ).mark("rotate")
+                    rotate_button.set_enabled(chosen is not None and aim_at is not None)
+                    reason = None
+                    if chosen is None:
+                        reason = (view.rotate_reason if rotators else None) or NO_ROTATOR_SET_UP
+                    elif aim_at is None:
+                        reason = NO_TARGET if state.mode == "controller" else NO_LOCATION
+                    if reason is not None:
+                        ui.label(reason).classes("text-grey").mark("rotate-reason")
+                    ui.label("Ctrl+Enter").classes("text-caption")
+                    snap = ui.button("Rotate to net control", on_click=snap_back).props(
+                        "outline"
+                    ).classes("w-full").mark("snap-back")
+                    snap.set_enabled(chosen is not None)
+                    ui.label("Home").classes("text-caption")
+                    for button in (rotate_button, snap):
+                        button.on("click", js_handler=BLUR)
+                    if rotators:
+                        options = {r.id: r.name for r in rotators if r.id is not None}
+                        with ui.row().classes("items-center gap-2"):
+                            ui.select(
+                                options, value=state.rotator_id, label="Rotator",
+                                on_change=lambda e: change_rotator(e.value),
+                            ).classes("w-48").mark("rotator").on(
+                                "update:model-value", js_handler=BLUR_ACTIVE
+                            )  # fmt: skip
+                            if chosen is not None:
+                                ui.label("Live" if chosen.live else "Simulation").classes(
+                                    "text-caption"
+                                )
 
-        # Stations the operator hears, logged as on the net control screen (owner, 2026-10-30).
-        i_hear = EntryLine(
-            control, session_id, qrz=qrz,
-            on_logged=lambda: lists.refresh(), heard=True, on_callsign=lambda: heard_aim.refresh(),
-        )  # fmt: skip
-        ui.label("I hear").classes("text-lg mt-2")
-        with ui.row().classes("items-start gap-4"):
-            with ui.column().classes("gap-1"):
-                i_hear.fields()
+                controls()
+                status = ui.label("").classes("text-lg").mark("status")
+                watcher = ui.timer(1.0, tick, active=False)
+                # Fixed keys (decision 22); ignored while a field or button has focus.
+                ui.keyboard(on_key=on_key, repeating=False)
 
-            @ui.refreshable
-            def heard_aim() -> None:
-                """Direction to the station on the line, Aim to <call> (sets the target, never
-                rotates), then Look up on QRZ, in one row (owner, 2026-10-31)."""
-                found = live.heard_aim(i_hear.callsign, i_hear.entry().grid)
-                call = normalize_callsign(i_hear.callsign) if i_hear.callsign else ""
-                with ui.row().classes("items-center gap-2 mt-2"):
-                    ui.label(
-                        "Direction: —" if found is None
-                        else f"Direction: {found[1].text} · {found[1].distance_text}"
-                    ).mark("i-hear-direction")  # fmt: skip
-                    button = ui.button(
-                        f"Aim to {call}" if call else "Aim", on_click=lambda: aim_heard(found)
-                    ).props("flat").mark("i-hear-aim")  # same props as Look up on QRZ
-                    button.on("click", js_handler=BLUR)
-                    button.set_enabled(found is not None)
-                    if qrz is not None:
-                        i_hear.qrz_button()
+                ui.label("Net control is calling").classes("text-overline mt-2")
+                with ui.grid(columns=3).classes("gap-1"):
+                    for line in COMPASS_LAYOUT:
+                        for sector in line:
+                            if sector:
+                                ui.button(sector, on_click=lambda s=sector: announce(s)).mark(
+                                    f"sector-{sector}"
+                                ).on("click", js_handler=BLUR)
+                            else:
+                                ui.label("")
+                banner = ui.label("Press the direction net control is calling").mark("banner")
 
-            heard_aim()
-
-        @ui.refreshable
-        def lists() -> None:
-            view = live.view(session_id)
-            rows = filter_rows(sort_rows(view.rows, state.sort), state.filter_text)
-            with ui.row().classes("items-end gap-4 mt-2"):
-                ui.label(f"Tonight ({len(view.rows)})").classes("text-lg")
-                ui.select(
-                    TONIGHT_SORTS, value=state.sort, label="Sort by",
-                    on_change=lambda e: set_sort(e.value),
-                ).classes("w-40").mark("tonight-sort").on(
-                    "update:model-value", js_handler=BLUR_ACTIVE
-                )  # fmt: skip
-            for row in rows:
-                selected = state.mode == "station" and row.checkin_id == state.selected
-                with (
-                    ui.row()
-                    .classes("items-center gap-3 w-full cursor-pointer no-wrap"
-                             + (" bg-blue-1" if selected else ""))
-                    .mark(f"row-{row.checkin_id}")
-                    .on("click", lambda r=row.checkin_id: select_row(r), js_handler=ROW_CLICK)
-                ):  # fmt: skip
-                    ui.label(str(row.sequence or "")).classes("w-6")
-                    ui.label(row.callsign).classes("w-24 font-bold")
-                    ui.label(row.name or "").classes("w-24")
-                    ui.label(row.grid_text).classes("w-32")
-                    ui.label(f"From you: {row.bearing_text or '—'}").classes("w-36")
-                    ui.label(row.distance_text or "").classes("w-20")
-                    ui.label(f"Published: {row.published}" if row.published else "").classes(
-                        "w-28 text-grey"
-                    )
-                    ui.select(
-                        HEARD_OPTIONS, value=row.heard or "",
-                        on_change=lambda e, c=row.checkin_id: set_heard(c, e.value),
-                    ).classes("w-28").mark(f"heard-{row.checkin_id}").set_enabled(
-                        not view.closed
+            # Everything you pick from.
+            with ui.column().classes("gap-2 grow min-w-0"):
+                ui.label("Find or point at").classes("text-overline")
+                # Also the filter for both lists (owner, 2026-10-30).
+                with ui.row().classes("items-center gap-4 w-full"):
+                    aim = (
+                        ui.input("Call, grid, alias or direction",
+                                 on_change=lambda e: set_filter(e.value))
+                        .props("clearable outlined dense").classes("w-80").mark("aim")
                     )  # fmt: skip
-                    if row.heard == "relay":
-                        ui.label(f"via {row.relay_call}")
+                    aim.on("keydown.enter", aim_enter, js_handler=AIM_ENTER)
+                    aim_result = ui.label("").mark("aim-result")
+                    add_tonight = ui.button("Add to tonight", on_click=add_aimed_tonight).props(
+                        "flat dense"
+                    ).mark("add-tonight")  # fmt: skip
+                    add_tonight.on("click", js_handler=BLUR)
+                    add_tonight.set_visibility(False)
 
-            regulars = filter_rows(
-                sort_regulars(view.regulars, state.regular_sort), state.filter_text
-            )
-            with ui.row().classes("items-end gap-4 mt-4"):
-                ui.label(f"Regulars not heard yet ({len(view.regulars)})").classes("text-lg")
-                ui.select(
-                    REGULAR_SORTS, value=state.regular_sort, label="Sort by",
-                    on_change=lambda e: set_regular_sort(e.value),
-                ).classes("w-40").mark("regular-sort").on(
-                    "update:model-value", js_handler=BLUR_ACTIVE
+                @ui.refreshable
+                def lists() -> None:
+                    view = live.view(session_id)
+                    rows = filter_rows(sort_rows(view.rows, state.sort), state.filter_text)
+                    with ui.row().classes("items-end gap-4 mt-2"):
+                        ui.label(f"Tonight ({len(view.rows)})").classes("text-lg")
+                        ui.select(
+                            TONIGHT_SORTS, value=state.sort, label="Sort by",
+                            on_change=lambda e: set_sort(e.value),
+                        ).classes("w-40").mark("tonight-sort").on(
+                            "update:model-value", js_handler=BLUR_ACTIVE
+                        )  # fmt: skip
+                    for row in rows:
+                        selected = state.mode == "station" and row.checkin_id == state.selected
+                        with (
+                            ui.row()
+                            .classes("items-center gap-3 w-full cursor-pointer no-wrap"
+                                     + (" bg-blue-1" if selected else ""))
+                            .mark(f"row-{row.checkin_id}")
+                            .on("click", lambda r=row.checkin_id: select_row(r),
+                                js_handler=ROW_CLICK)
+                        ):  # fmt: skip
+                            ui.label(str(row.sequence or "")).classes("w-6")
+                            ui.label(row.callsign).classes("w-24 font-bold")
+                            ui.label(row.name or "").classes("w-24")
+                            ui.label(row.grid_text).classes("w-32")
+                            ui.label(f"From you: {row.bearing_text or '—'}").classes("w-36")
+                            ui.label(row.distance_text or "").classes("w-20")
+                            ui.label(
+                                f"Published: {row.published}" if row.published else ""
+                            ).classes("w-28 text-grey")
+                            ui.select(
+                                HEARD_OPTIONS, value=row.heard or "",
+                                on_change=lambda e, c=row.checkin_id: set_heard(c, e.value),
+                            ).classes("w-28").mark(f"heard-{row.checkin_id}").set_enabled(
+                                not view.closed
+                            )  # fmt: skip
+                            if row.heard == "relay":
+                                ui.label(f"via {row.relay_call}")
+
+                    regulars = filter_rows(
+                        sort_regulars(view.regulars, state.regular_sort), state.filter_text
+                    )
+                    with ui.row().classes("items-end gap-4 mt-4"):
+                        ui.label(f"Regulars not heard yet ({len(view.regulars)})").classes(
+                            "text-lg"
+                        )
+                        ui.select(
+                            REGULAR_SORTS, value=state.regular_sort, label="Sort by",
+                            on_change=lambda e: set_regular_sort(e.value),
+                        ).classes("w-40").mark("regular-sort").on(
+                            "update:model-value", js_handler=BLUR_ACTIVE
+                        )  # fmt: skip
+                    for regular in regulars:
+                        selected = state.mode == "regular" and regular.callsign == state.callsign
+                        with (
+                            ui.row()
+                            .classes("items-center gap-3 w-full cursor-pointer no-wrap"
+                                     + (" bg-blue-1" if selected else ""))
+                            .mark(f"regular-{regular.callsign}")
+                            .on("click", lambda c=regular.callsign: select_regular(c),
+                                js_handler=ROW_CLICK)
+                        ):  # fmt: skip
+                            ui.label(regular.callsign).classes("w-24 font-bold")
+                            ui.label(regular.name or "").classes("w-24")
+                            ui.label(regular.grid_text).classes("w-32")
+                            ui.label(f"From you: {regular.bearing_text or '—'}").classes("w-36")
+                            ui.label(regular.distance_text or "").classes("w-20")
+                            ui.label(regular.attendance_text).classes("w-24 text-grey")
+                            ui.label(f"Last: {regular.last_seen}").classes("w-32 text-grey")
+                            heard = ui.button(
+                                "Heard", on_click=lambda c=regular.callsign: heard_regular(c)
+                            ).props("flat dense").mark(f"heard-regular-{regular.callsign}")
+                            heard.on("click", js_handler=BLUR)
+                            heard.set_enabled(not view.closed)
+
+                lists()
+
+                # Stations the operator hears, logged as on net control's screen.
+                i_hear = EntryLine(
+                    control, session_id, qrz=qrz, on_logged=lambda: lists.refresh(),
+                    heard=True, on_callsign=lambda: heard_aim.refresh(),
                 )  # fmt: skip
-            for regular in regulars:
-                selected = state.mode == "regular" and regular.callsign == state.callsign
-                with (
-                    ui.row()
-                    .classes("items-center gap-3 w-full cursor-pointer no-wrap"
-                             + (" bg-blue-1" if selected else ""))
-                    .mark(f"regular-{regular.callsign}")
-                    .on("click", lambda c=regular.callsign: select_regular(c),
-                        js_handler=ROW_CLICK)
-                ):  # fmt: skip
-                    ui.label(regular.callsign).classes("w-24 font-bold")
-                    ui.label(regular.name or "").classes("w-24")
-                    ui.label(regular.grid_text).classes("w-32")
-                    ui.label(f"From you: {regular.bearing_text or '—'}").classes("w-36")
-                    ui.label(regular.distance_text or "").classes("w-20")
-                    ui.label(regular.attendance_text).classes("w-24 text-grey")
-                    ui.label(f"Last: {regular.last_seen}").classes("w-32 text-grey")
-                    heard = ui.button(
-                        "Heard", on_click=lambda c=regular.callsign: heard_regular(c)
-                    ).props("flat dense").mark(f"heard-regular-{regular.callsign}")
-                    heard.on("click", js_handler=BLUR)
-                    heard.set_enabled(not view.closed)
+                ui.label("I hear").classes("text-overline mt-2")
+                with ui.column().classes("gap-1"):
+                    i_hear.fields()
 
-        lists()
-        i_hear.set_enabled(not first.closed)
+                @ui.refreshable
+                def heard_aim() -> None:
+                    """Direction to the station on the line, Aim to <call> (sets the Target,
+                    never rotates), then Look up on QRZ, in one row (owner, 2026-10-31)."""
+                    found = live.heard_aim(i_hear.callsign, i_hear.entry().grid)
+                    call = normalize_callsign(i_hear.callsign) if i_hear.callsign else ""
+                    with ui.row().classes("items-center gap-2"):
+                        ui.label(
+                            "Direction: —" if found is None
+                            else f"Direction: {found[1].text} · {found[1].distance_text}"
+                        ).mark("i-hear-direction")  # fmt: skip
+                        button = ui.button(
+                            f"Aim to {call}" if call else "Aim",
+                            on_click=lambda: aim_heard(found),
+                        ).props("flat").mark("i-hear-aim")  # same props as Look up on QRZ
+                        button.on("click", js_handler=BLUR)
+                        button.set_enabled(found is not None)
+                        if qrz is not None:
+                            i_hear.qrz_button()
+
+                heard_aim()
+                i_hear.set_enabled(not first.closed)
 
 
-def _substitute_dialog(
-    live: LiveNet, session_id: int, refresh: Callable[[], None]
-) -> ui.dialog:
-    with ui.dialog() as dialog, ui.card():
-        ui.label("Substitute controller tonight").classes("text-lg")
-        ui.label("Applies to this session only; the net's default is not changed.").classes(
-            "text-caption"
-        )
-        call = ui.input("Callsign").mark("sub-call")
-        grid = ui.input("Grid (optional)").mark("sub-grid")
-        bearing = ui.input("Measured bearing, ° (optional)").mark("sub-bearing")
+def _unlocated(view: LiveNetView, state: _State) -> str:
+    """The Target card when the pick has no location (invariant 4: nothing is guessed)."""
+    name = ""
+    if state.mode == "station":
+        name = next((r.callsign for r in view.rows if r.checkin_id == state.selected), "")
+    elif state.mode == "regular":
+        name = state.callsign or ""
+    if state.mode == "controller" or not name:
+        return NO_TARGET
+    return f"{name} — grid needed: type a grid, or pick another station."
 
-        def apply() -> None:
-            try:
-                text = (bearing.value or "").strip()
-                value = float(text) if text else None
-                live.set_substitute(session_id, call.value, grid.value, value)
-            except ValueError as exc:
-                _error(exc)
-                return
-            dialog.close()
-            refresh()
 
-        with ui.row():
-            ui.button("Apply for tonight", on_click=apply)
-            ui.button("Cancel", on_click=dialog.close).props("flat")
-    return dialog
+class _ControllerDialog:
+    """Change… / Add grid… / Set net control…: one dialog, two ways to keep it
+    (redesign, owner 2026-11-01)."""
+
+    def __init__(
+        self, live: LiveNet, session_id: int, qrz: QrzClient | None, refresh: Callable[[], None]
+    ) -> None:
+        self.live, self.session_id, self.qrz, self.refresh = live, session_id, qrz, refresh
+        with ui.dialog() as self.dialog, ui.card().mark("controller-dialog"):
+            ui.label("Net control").classes("text-lg")
+            self.call = ui.input("Callsign").mark("nc-call")
+            with ui.row().classes("items-center gap-2"):
+                self.grid = ui.input("Grid").mark("nc-grid")
+                if qrz is not None:
+                    ui.button("Get grid from QRZ", on_click=self.from_qrz).props(
+                        "flat dense"
+                    ).mark("nc-qrz")
+            self.bearing = ui.input("Measured bearing, ° (optional)").mark("nc-bearing")
+            ui.label(
+                "Use for tonight changes this session only. Save for this net also makes "
+                "it the net's net control for future sessions."
+            ).classes("text-caption w-80")
+            with ui.row():
+                ui.button("Use for tonight", on_click=lambda: self.apply(False)).mark(
+                    "nc-tonight"
+                )
+                ui.button("Save for this net", on_click=lambda: self.apply(True)).mark("nc-save")
+                ui.button("Cancel", on_click=self.dialog.close).props("flat")
+
+    def open(self) -> None:
+        """Starts from tonight's values each time."""
+        session = self.live.nets.get_session(self.session_id)
+        self.call.set_value(session.controller_call or "")
+        self.grid.set_value(session.controller_grid or "")
+        bearing = session.controller_bearing
+        self.bearing.set_value("" if bearing is None else f"{bearing:g}")
+        self.dialog.open()
+
+    async def from_qrz(self) -> None:
+        """Only on this press (offline-first); fills the grid, saves nothing."""
+        call = (self.call.value or "").strip().upper()
+        if self.qrz is None or not call:
+            return
+        try:
+            record, notice = await run.io_bound(self.qrz.lookup, call)
+        except QrzError as exc:
+            _error(exc)
+            return
+        self.live.desk.qrz_store(record, notice)
+        if record.grid and is_grid(record.grid):
+            self.grid.set_value(record.grid)
+        else:
+            ui.notify(f"QRZ has no grid for {call}.", type="warning")
+
+    def apply(self, save_for_net: bool) -> None:
+        try:
+            text = (self.bearing.value or "").strip()
+            value = float(text) if text else None
+            self.live.set_controller(
+                self.session_id, self.call.value, self.grid.value, value,
+                save_for_net=save_for_net,
+            )  # fmt: skip
+        except ValueError as exc:
+            _error(exc)
+            return
+        self.dialog.close()
+        self.refresh()
