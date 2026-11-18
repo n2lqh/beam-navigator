@@ -61,6 +61,7 @@ class LookupView:
     title: str | None = None
     bearing_deg: float | None = None
     bearing_text: str | None = None
+    grid_text: str | None = None  # the target's grid, beside the heading (owner, 2026-11-18)
     distance_text: str | None = None
     reverse_text: str | None = None
     long_path_text: str | None = None
@@ -383,6 +384,7 @@ class Desk:
         )
         view = LookupView(
             title=f"{target.label} — {target.source}",
+            grid_text=target.grid_text,
             message=result.message,
             coarse_note=result.coarse_note,
             alternative=target.alternative,

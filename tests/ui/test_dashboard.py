@@ -455,3 +455,19 @@ async def test_keys_changed_after_the_page_opened(
     key("F9", ctrl=False)
     await user.should_see("Simulated:")
     assert len(sim.commands) == 1
+
+
+async def test_lookup_shows_the_grid_with_the_heading(
+    user: User, desk: Desk, sim: SimulationAdapter
+) -> None:  # owner, 2026-11-18: "display the grid as well as the heading and direction"
+    desk.save_station_grid("W2KV", "FN20ok")
+    register_pages(lambda: desk)
+    await user.open("/")
+    await look_up(user, "W2KV")
+    await user.should_see("Grid FN20ok")
+    await user.should_see("354.")
+    user.find(marker="target").clear()
+    await look_up(user, "90")  # a heading has no grid
+    await user.should_see("90.0° E")
+    await user.should_not_see(marker="lookup-grid")
+    assert sim.commands == []

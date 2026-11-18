@@ -226,6 +226,8 @@ def dashboard(desk: Desk, qrz: QrzClient | None = None) -> None:
                 return
             with ui.card().classes("w-full"):
                 ui.label(view.title or "").classes("text-lg")
+                if view.grid_text:
+                    ui.label(f"Grid {view.grid_text}").classes("text-2xl").mark("lookup-grid")
                 if view.bearing_text:
                     ui.label(view.bearing_text).classes("text-5xl font-bold")
                 for line in (view.distance_text, view.reverse_text, view.long_path_text,
