@@ -1,5 +1,6 @@
 """The nets page and live net screen through NiceGUI's simulated user. Simulator only."""
 
+import asyncio
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -579,3 +580,34 @@ async def test_i_hear_aim_names_the_call_and_sits_left_of_qrz(
     assert qrz_box in row and row.index(aim) == row.index(qrz_box) - 1
     assert aim.props.get("flat") == qrz.props.get("flat") is True
     assert aim.props.get("size") == qrz.props.get("size")
+
+
+async def test_i_hear_new_call_clears_the_last_station(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int
+) -> None:  # owner, 2026-11-18: a grid left on the line blocked the next lookup
+    await open_net(user, desk, tonight_after(conn, w2kv))
+    entry(user, "callsign").set_value("K9ZZZ")
+    entry(user, "grid").set_value("EM99")
+    entry(user, "report").set_value("59")
+    entry(user, "callsign").set_value("W2KV")
+    assert entry(user, "report").value == ""
+    press_enter(user, "callsign")
+    assert entry(user, "grid").value == "FN20OK"
+    await user.should_see("Aim to W2KV")
+
+
+async def test_i_hear_fills_after_a_pause_without_enter(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:  # owner, 2026-11-18: "the lookup should happen as soon as it is possible"
+    tonight = tonight_after(conn, w2kv)
+    await open_net(user, desk, tonight)
+    entry(user, "callsign").set_value("W2KV")
+    await user.should_see("Direction: 3")  # from the saved record while typing
+    for _ in range(30):
+        if entry(user, "grid").value:
+            break
+        await asyncio.sleep(0.1)
+    assert entry(user, "grid").value == "FN20OK"
+    press_enter(user, "callsign")  # one Enter logs: the details are already there
+    await user.should_see("Logged W2KV")
+    assert sim.commands == []

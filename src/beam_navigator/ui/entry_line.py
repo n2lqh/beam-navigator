@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from nicegui import events, run, ui
 
+from beam_navigator.core.callsign import is_callsign
 from beam_navigator.core.keymap import Keymap
 from beam_navigator.core.qrz import QrzRecord, page_url
 from beam_navigator.entry_keys import ENTRY_ACTIONS, FIELDS, key_action, next_field, previous_field
@@ -28,6 +29,7 @@ HISTORY = "italic text-grey-7"  # filled from the station record, not yet confir
 NEEDED = "bg-yellow-2"  # a new station: these are wanted
 FROM_QRZ = "from-qrz"  # filled from QRZ (requirements 4.9), shown in the history style too
 ACTIVE = "entry-active ring-2 ring-primary"
+PAUSE_S = 0.8  # I-hear line: look the call up once typing stops this long (owner, 2026-11-18)
 
 
 def _keys_js(keymap: Keymap, space_advances: bool) -> str:
@@ -67,6 +69,7 @@ class _State:
     filled_for: str = ""  # the callsign auto-fill last ran for
     from_qrz: set[str] = field(default_factory=set)
     enabled: bool = True
+    typed: int = 0  # callsign edits so far; a pause lookup runs only if none came after it
 
 
 class EntryLine:
@@ -154,10 +157,12 @@ class EntryLine:
         state.needed.discard(name)
         if name == "callsign":
             self.qrz_link()
-            # Details filled for the previous call never carry over to a new one.
+            # Details filled for the previous call never carry over to a new one. On the
+            # I-hear line nothing does: a typed grid would block the new call's lookup.
             state.filling = True
-            for filled in state.history:
-                self.inputs[filled].set_value("")
+            for other in self.inputs if self.heard else state.history:
+                if other != "callsign":
+                    self.inputs[other].set_value("")
             state.filling = False
             state.history.clear()
             state.from_qrz.clear()
@@ -166,6 +171,9 @@ class EntryLine:
             self.message.set_text("")
             self.refresh_suggestions()
             self.on_callsign()
+            if self.heard:
+                state.typed += 1
+                ui.timer(PAUSE_S, lambda n=state.typed: self.after_pause(n), once=True)
         elif name == "grid":
             self.on_callsign()
         self.restyle()
@@ -199,15 +207,17 @@ class EntryLine:
         if url is not None:
             link.props["href"], link.props["target"] = url, "_blank"
 
-    async def qrz_lookup(self, auto: bool = False) -> None:
-        """Network in a worker thread; fills only blank fields when it returns."""
+    async def qrz_lookup(self, auto: bool = False, quiet: bool = False) -> None:
+        """Network in a worker thread; fills only blank fields when it returns. quiet: the
+        pause lookup may have caught half a call, so it never warns."""
         call = self.callsign.upper()
         if self.qrz is None or not call:
             return
         try:
             record, notice = await run.io_bound(self.qrz.lookup, call)
         except QrzError as exc:
-            if not (auto and str(exc) in (NO_LOGIN, NO_STORE)):  # QRZ not set up: say nothing
+            # QRZ not set up: an automatic lookup says nothing.
+            if not quiet and not (auto and str(exc) in (NO_LOGIN, NO_STORE)):
                 ui.notify(str(exc), type="warning", multi_line=True)
             return
         self.control.desk.qrz_store(record, notice)
@@ -233,8 +243,19 @@ class EntryLine:
         state.filling = False
         self.message.set_text(" ".join(part for part in ("Filled from QRZ.", notice) if part))
 
-    def autofill(self) -> bool:
-        """Fills from the station record; True when QRZ should be asked (owner, 2026-10-29)."""
+    def after_pause(self, typed: int) -> None:
+        """The I-hear lookup without Enter: only for a whole callsign, only if no key came
+        since, and never moving the cursor out of the callsign box."""
+        call = self.callsign.upper()
+        if typed != self.state.typed or not is_callsign(call) or self.state.filled_for == call:
+            return
+        if self.autofill(rewrite_call=False):
+            ui.timer(0, lambda: self.qrz_lookup(auto=True, quiet=True), once=True)
+        self.restyle()
+
+    def autofill(self, rewrite_call: bool = True) -> bool:
+        """Fills from the station record; True when QRZ should be asked (owner, 2026-10-29).
+        rewrite_call=False leaves the callsign box alone while the operator may still type."""
         state = self.state
         call = self.callsign
         if not call:
@@ -242,7 +263,8 @@ class EntryLine:
         found = self.control.autofill(call)
         state.filled_for = found.callsign
         state.filling = True
-        self.inputs["callsign"].set_value(found.callsign)
+        if rewrite_call:
+            self.inputs["callsign"].set_value(found.callsign)
         if found.known:
             for name, value in (("name", found.name), ("grid", found.grid), ("qth", found.qth)):
                 if name in self.inputs and value and not (self.inputs[name].value or "").strip():
