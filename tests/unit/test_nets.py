@@ -178,7 +178,7 @@ def test_listing_next_text(book: NetBook) -> None:
     book.save(form(name="Other net", weekday=None, start_time=""))
     texts = {s.net.name: s.next_text for s in book.listing(NOW)}
     assert texts == {"Test net": "Tue 3 Nov 2026, 20:00 EST", "Other net": "Not scheduled"}
-    assert book.view(book.listing(NOW)[1].net.id or 0, NOW).next_text == (
+    assert book.view(book.listing(NOW)[0].net.id or 0, NOW).next_text == (
         "Tue 3 Nov 2026, 20:00 EST"
     )
 
@@ -246,3 +246,19 @@ def test_edit_keeps_favourite_duplicate_does_not(book: NetBook) -> None:
     book.set_favourite(net.id, True)
     assert book.save(form(mode="FM"), net.id).favourite
     assert not book.duplicate(net.id).favourite
+
+
+def test_listing_starts_with_today_favourites_then_the_week(book: NetBook) -> None:
+    # owner, 2026-11-18: "if nets is clicked on a monday have the monday nets at the
+    # top starting with any favorite monday nets then progress through the week"
+    for name, weekday, start in (
+        ("Mon fav", 0, "20:00"), ("Tue late", 1, "21:00"), ("Tue early", 1, "07:00"),
+        ("Tue fav", 1, "22:00"), ("Wed", 2, "19:00"), ("Unscheduled", None, ""),
+    ):  # fmt: skip
+        net = book.save(form(name=name, weekday=weekday, start_time=start))
+        if name.endswith("fav"):
+            book.set_favourite(net.id or 0, True)
+    # NOW is Tuesday 18:00: this morning's net still counts as today's
+    assert [s.net.name for s in book.listing(NOW)] == [
+        "Tue fav", "Tue early", "Tue late", "Wed", "Mon fav", "Unscheduled"
+    ]  # fmt: skip

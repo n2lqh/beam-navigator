@@ -146,7 +146,7 @@ The stations and grids are saved for next time (a roster never overwrites a stat
 
 ## Nets and history
 
-**Nets** lists your nets. Use **Search nets** (name, frequency, band or controller), the star to mark favourites, and **Favourites only** to show just those. Each net has **Edit**, **Duplicate** and **Export**; **New net** adds one, and **Import nets (\*.beamnet.json)** adds nets from a file someone shared. Importing never overwrites a net with the same name.
+**Nets** lists your nets in week order from today: today's nets first (favourites, then by start time), then the rest of the week, then nets with no schedule. Use **Search nets** (name, frequency, band or controller), the star to mark favourites, and **Favourites only** to show just those. Each net has **Edit**, **Duplicate** and **Export**; **New net** adds one, and **Import nets (\*.beamnet.json)** adds nets from a file someone shared. Importing never overwrites a net with the same name.
 
 Open a net to see its next occurrence, default controller, past **Sessions** and **Participants** (callsign, last grid, sessions attended, last seen). **Start session** begins tonight's session; each session has **Open** (the live net screen) and **Net control**.
 

@@ -5,7 +5,7 @@ import json
 import math
 import sqlite3
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, time
 from importlib.resources import files
 from typing import TYPE_CHECKING
 
@@ -200,8 +200,10 @@ class NetBook:
         query: str = "",
         favourites_only: bool = False,
     ) -> list[NetSummary]:
-        """Favourites first, then by name; search matches name, channel, frequency (MHz as
-        text), band and default controller, ignoring case and surrounding spaces."""
+        """Today's nets first (favourites, then by start time), then on through the week,
+        then unscheduled nets; archived last (owner, 2026-11-18). Search matches name,
+        channel, frequency (MHz as text), band and default controller, ignoring case and
+        surrounding spaces."""
         wanted = query.strip().casefold()
         nets = [
             net for net in self.nets.list_nets()
@@ -210,11 +212,25 @@ class NetBook:
             and (net.favourite or not favourites_only)
             and (not wanted or wanted in _search_text(net))
         ]  # fmt: skip
-        nets.sort(key=lambda net: not net.favourite)  # stable: name order kept within each
+        nets.sort(key=lambda net: self._week_key(net, now))  # stable: name order kept
         return [
             NetSummary(net, self.next_text(net, now), len(self.nets.sessions(net.id or 0)))
             for net in nets
         ]
+
+    def _week_key(self, net: Net, now: datetime) -> tuple[bool, int, bool, float]:
+        """Days from today in the operator's zone, so this morning's net is still today's."""
+        if net.weekday is None or net.start_time is None:
+            return net.archived, 7, not net.favourite, 0.0
+        profile = self.desk.profiles.get_active()
+        home = zone_for(profile.timezone if profile else None)
+        today = now.astimezone(home).date()
+        midnight = datetime.combine(today, time())
+        midnight = midnight.replace(tzinfo=home) if home is not None else midnight.astimezone()
+        zone = zone_for(net.timezone, profile.timezone if profile else None)
+        when = next_occurrence(net.weekday, net.start_time, zone, midnight)
+        days = (when.astimezone(home).date() - today).days
+        return net.archived, days, not net.favourite, when.timestamp()
 
     def view(self, net_id: int, now: datetime) -> NetView:
         net = self.nets.get_net(net_id)
