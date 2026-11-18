@@ -8,12 +8,18 @@ import pytest
 from nicegui import ui
 from nicegui.testing import User
 
-from beam_navigator.core.models import Net, OperatorProfile, RotatorProfile
+from beam_navigator.core.models import Net, OperatorProfile, RotatorProfile, Station
+from beam_navigator.core.qrz import QrzRecord
 from beam_navigator.desk import Desk
 from beam_navigator.rotators.service import RotateService
 from beam_navigator.rotators.simulation import SimulationAdapter
 from beam_navigator.store.db import open_db
-from beam_navigator.store.repositories import NetRepository, ProfileRepository, RotatorRepository
+from beam_navigator.store.repositories import (
+    NetRepository,
+    ProfileRepository,
+    RotatorRepository,
+    StationRepository,
+)
 from beam_navigator.ui.app import register_pages
 
 W2KV = (Path(__file__).parents[1] / "fixtures" / "w2kv_144mhz_2026-10-26.txt").read_text(
@@ -142,3 +148,53 @@ async def test_replace_earlier_roster_grid(
     await user.should_see("Saved 17 check-ins")
     station = StationRepository(conn).get("K3WGR")
     assert station is not None and station.grid == "FN10xi"
+
+
+# owner, 2026-11-18: grids a roster leaves out come from the database, then QRZ ------
+
+DMR = (Path(__file__).parents[1] / "fixtures" / "ka3wxv_dmr_2026-10-26.txt").read_text(
+    encoding="utf-8"
+)
+
+
+class StubQrz:
+    """Answers every call with one grid and records what was asked; no network."""
+
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    def lookup(self, callsign: str) -> tuple[QrzRecord, str | None]:
+        self.asked.append(callsign)
+        return QrzRecord(callsign, None, "FN10ab", None, None, None, None), None
+
+
+async def parse_dmr(user: User, net_id: int) -> None:
+    await user.open("/import")
+    pick(user, "roster-text", DMR)
+    pick(user, "net", net_id)
+    pick(user, "date", "2026-10-26")
+    user.find(marker="parse").click()
+
+
+async def test_import_fills_grids_from_saved_records_and_qrz(
+    user: User, desk: Desk, net_id: int, conn: sqlite3.Connection, sim: SimulationAdapter
+) -> None:
+    StationRepository(conn).save(Station("K3JJZ", None, "FN10xh", None, None, "saved", ""))
+    stub = StubQrz()
+    register_pages(lambda: desk, stub)  # type: ignore[arg-type]
+    await parse_dmr(user, net_id)
+    await user.should_see("from saved record")
+    await user.should_see("QRZ filled")
+    assert "K3JJZ" not in stub.asked and "WX3K" in stub.asked
+    await user.should_see("from QRZ")
+    assert sim.commands == []
+
+
+async def test_import_without_qrz_login_stays_quiet(
+    user: User, desk: Desk, net_id: int
+) -> None:
+    register_pages(lambda: desk)  # the real client, with no login saved
+    await parse_dmr(user, net_id)
+    await user.should_see("From you:")
+    await user.should_not_see("QRZ filled")
+    await user.should_not_see("Set up your QRZ login")

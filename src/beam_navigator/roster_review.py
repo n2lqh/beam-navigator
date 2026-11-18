@@ -11,6 +11,7 @@ from dataclasses import dataclass, field, replace
 
 from beam_navigator.core.maidenhead import is_grid
 from beam_navigator.core.models import Net, Session
+from beam_navigator.core.qrz import QrzRecord
 from beam_navigator.core.roster_parser import ParseResult, parse_roster
 from beam_navigator.desk import Desk
 from beam_navigator.store.repositories import BandRepository, NetRepository
@@ -36,6 +37,10 @@ class ReviewRow:
     # the operator saved, which a roster never changes (decision 13).
     earlier_grid: str | None = None
     replace_grid: bool = False
+    # Where a grid the roster left out came from: "saved record" or "QRZ" (owner,
+    # 2026-11-18). Kept on the check-in, never saved as something the roster said.
+    grid_from: str | None = None
+    filled_grid: str | None = None
 
 
 @dataclass
@@ -103,10 +108,52 @@ class RosterReview:
                 known = self._desk.stations.get(row.callsign or "")
                 if known is not None and known.source == "roster":
                     review_row.earlier_grid = known.grid
+            if review_row.callsign is not None and not review_row.grid:
+                self._fill_grid(review_row)
             self.recompute(review_row)
             rows.append(review_row)
         suggested = any(row.is_controller for row in parsed.rows)
         return Review(text, rows, list(parsed.warnings), suggested, parsed)
+
+    def _fill_grid(self, row: ReviewRow) -> None:
+        call = row.callsign or ""
+        saved = self._desk.stations.get(call)
+        if saved is not None and saved.grid and is_grid(saved.grid):
+            self._set_filled(row, saved.grid, "saved record")
+            return
+        cached = self._desk.qrz.get(call)
+        if cached is not None and cached[0].grid and is_grid(cached[0].grid):
+            self._set_filled(row, cached[0].grid, "QRZ")
+
+    @staticmethod
+    def _set_filled(row: ReviewRow, grid: str, source: str) -> None:
+        row.grid, row.grid_from, row.filled_grid = grid, source, grid
+
+    def qrz_wanted(self, review: Review) -> list[str]:
+        """Calls still without a grid that QRZ may be asked about (automatic lookup on,
+        nothing useful stored), each once."""
+        wanted: list[str] = []
+        for row in review.rows:
+            call = row.callsign
+            if call and row.include and not (row.grid or "").strip() and call not in wanted:
+                if self._desk.qrz_auto(call):
+                    wanted.append(call)
+        return wanted
+
+    def apply_qrz(self, review: Review, record: QrzRecord, notice: str | None = None) -> int:
+        """Keeps QRZ's answer, then fills its grid into this call's rows that are still
+        blank; the count."""
+        self._desk.qrz_store(record, notice)
+        if not record.grid or not is_grid(record.grid):
+            return 0
+        filled = 0
+        for row in review.rows:
+            if row.callsign and row.callsign.upper() == record.call.upper():
+                if not (row.grid or "").strip():
+                    self._set_filled(row, record.grid, "QRZ")
+                    self.recompute(row)
+                    filled += 1
+        return filled
 
     def recompute(self, row: ReviewRow) -> None:
         """Bearing and distance from the operator, after a grid edit."""
@@ -158,7 +205,11 @@ class RosterReview:
             if row.include and row.callsign and row.earlier_grid and row.replace_grid
             and (grid := (row.grid or "").strip())
         }  # fmt: skip
+        looked_up = frozenset(
+            row.callsign for row in review.rows
+            if row.callsign and row.grid_from and (row.grid or "").strip() == row.filled_grid
+        )  # fmt: skip
         return self._nets.import_roster(
             net_id, date, review.raw_text, result, replace_session_id, controller=controller,
-            replace_grids=replace_grids,
+            replace_grids=replace_grids, looked_up=looked_up,
         )  # fmt: skip

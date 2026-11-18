@@ -5,12 +5,18 @@ from pathlib import Path
 import pytest
 
 from beam_navigator.core.models import Net, OperatorProfile, Station
+from beam_navigator.core.qrz import QrzRecord
 from beam_navigator.desk import Desk
 from beam_navigator.roster_review import RosterReview
 from beam_navigator.rotators.service import RotateService
 from beam_navigator.rotators.simulation import SimulationAdapter
 from beam_navigator.store.db import open_db
-from beam_navigator.store.repositories import NetRepository, ProfileRepository, StationRepository
+from beam_navigator.store.repositories import (
+    NetRepository,
+    ProfileRepository,
+    QrzRepository,
+    StationRepository,
+)
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
 
@@ -236,3 +242,53 @@ def test_kept_unless_chosen(review: RosterReview, conn: sqlite3.Connection, net_
     review.save(net_id, "2026-10-26", result)  # type: ignore[arg-type]
     station = stations.get("K3WGR")
     assert station is not None and station.grid == "FN10xh"
+
+
+# owner, 2026-11-18: a roster without grids is completed from the database or QRZ ----
+
+DMR = "ka3wxv_dmr_2026-10-26.txt"  # no grids in it
+
+
+def dmr_row(result: object, call: str) -> object:
+    return next(row for row in result.rows if row.callsign == call)  # type: ignore[attr-defined]
+
+
+def test_missing_grid_from_the_saved_record(review: RosterReview, conn: sqlite3.Connection) -> None:
+    StationRepository(conn).save(Station("K3JJZ", None, "FN10xh", None, None, "saved", ""))
+    row = dmr_row(review.parse(fixture(DMR)), "K3JJZ")
+    assert row.grid == "FN10xh" and row.grid_from == "saved record"  # type: ignore[attr-defined]
+    assert row.from_you is not None  # type: ignore[attr-defined]
+    other = dmr_row(review.parse(fixture(DMR)), "WX3K")
+    assert other.grid is None and other.grid_from is None  # type: ignore[attr-defined]
+
+
+def qrz_answer(call: str, grid: str | None) -> QrzRecord:
+    return QrzRecord(call, None, grid, None, None, None, None)
+
+
+def test_missing_grid_from_a_qrz_answer(review: RosterReview, conn: sqlite3.Connection) -> None:
+    QrzRepository(conn).save(qrz_answer("WX3K", "FN10ab"), "2026-11-18T00:00:00")
+    row = dmr_row(review.parse(fixture(DMR)), "WX3K")
+    assert row.grid == "FN10ab" and row.grid_from == "QRZ"  # type: ignore[attr-defined]
+
+
+def test_qrz_wanted_then_applied(review: RosterReview) -> None:
+    result = review.parse(fixture(DMR))
+    assert "WX3K" in review.qrz_wanted(result)
+    assert review.apply_qrz(result, qrz_answer("WX3K", "FN10ab")) == 1
+    row = dmr_row(result, "WX3K")
+    assert row.grid == "FN10ab" and row.grid_from == "QRZ"  # type: ignore[attr-defined]
+    assert "WX3K" not in review.qrz_wanted(result)
+    assert review.apply_qrz(result, qrz_answer("AG3J", None)) == 0  # no grid: nothing
+
+
+def test_looked_up_grid_not_saved_as_the_roster_s(
+    review: RosterReview, conn: sqlite3.Connection, net_id: int
+) -> None:
+    result = review.parse(fixture(DMR))
+    review.apply_qrz(result, qrz_answer("WX3K", "FN10ab"))
+    session = review.save(net_id, "2026-10-26", result)
+    [checkin] = [c for c in NetRepository(conn).checkins(session.id) if c.callsign == "WX3K"]
+    assert checkin.grid == "FN10ab"  # the session remembers where to point
+    station = StationRepository(conn).get("WX3K")
+    assert station is None or station.grid is None  # the roster never said it

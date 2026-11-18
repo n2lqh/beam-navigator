@@ -158,7 +158,7 @@ def register_pages(
         header()
         desk = desk_factory()
         bands = [band.name for band in desk.bands.list()]
-        import_page(RosterReview(desk.conn, desk), NetRepository(desk.conn), bands)
+        import_page(RosterReview(desk.conn, desk), NetRepository(desk.conn), bands, qrz)
 
     @ui.page("/nets")
     def nets() -> None:

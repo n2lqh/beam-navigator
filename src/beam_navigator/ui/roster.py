@@ -3,9 +3,11 @@
 from collections.abc import Callable
 from datetime import date
 
-from nicegui import ui
+from nicegui import run, ui
 
 from beam_navigator.core.models import Net
+from beam_navigator.qrz_client import NO_LOGIN, NOT_FOUND, QrzClient, QrzError
+from beam_navigator.qrz_login import NO_STORE
 from beam_navigator.roster_review import Review, ReviewRow, RosterReview
 from beam_navigator.store.repositories import NetRepository
 
@@ -42,7 +44,10 @@ def new_net_dialog(
     return dialog
 
 
-def import_page(review: RosterReview, nets: NetRepository, band_names: list[str]) -> None:
+def import_page(
+    review: RosterReview, nets: NetRepository, band_names: list[str],
+    qrz: QrzClient | None = None,
+) -> None:  # fmt: skip
     state: dict[str, Review | None] = {"review": None}
 
     def net_options() -> dict[int, str]:
@@ -61,10 +66,35 @@ def import_page(review: RosterReview, nets: NetRepository, band_names: list[str]
         if text:
             roster_text.set_value(text)
 
-    def parse() -> None:
-        state["review"] = review.parse(roster_text.value or "")
+    async def parse() -> None:
+        current = review.parse(roster_text.value or "")
+        state["review"] = current
         saved_link.clear()
         table.refresh()
+        if qrz is not None:
+            await grids_from_qrz(qrz, current)
+
+    async def grids_from_qrz(client: QrzClient, current: Review) -> None:
+        """Grids the roster left out, one QRZ lookup at a time (owner, 2026-11-18). The
+        first failure ends the pass; QRZ not set up says nothing."""
+        calls = review.qrz_wanted(current)
+        filled = 0
+        for call in calls:
+            qrz_status.set_text(f"Looking up grids on QRZ: {call}…")
+            try:
+                record, notice = await run.io_bound(client.lookup, call)
+            except QrzError as exc:
+                if str(exc).startswith(NOT_FOUND):
+                    continue
+                if str(exc) not in (NO_LOGIN, NO_STORE):
+                    ui.notify(str(exc), type="warning", multi_line=True)
+                break
+            if state["review"] is not current:
+                break  # parsed again meanwhile: this answer is for an old list
+            filled += review.apply_qrz(current, record, notice)
+        qrz_status.set_text(f"QRZ filled {filled} grids." if filled else "")
+        if filled and state["review"] is current:
+            table.refresh()
 
     def save(replace_session_id: int | None = None, keep_both: bool = False) -> None:
         current = state["review"]
@@ -125,6 +155,7 @@ def import_page(review: RosterReview, nets: NetRepository, band_names: list[str]
                 "date"
             )
             ui.button("Parse", on_click=parse).mark("parse")
+        qrz_status = ui.label("").classes("text-grey").mark("qrz-status")
 
         @ui.refreshable
         def table() -> None:
@@ -178,6 +209,10 @@ def _review_row(review: RosterReview, row: ReviewRow) -> None:
                  on_change=lambda e: grid_changed(e.value)).classes("w-24").mark(
             f"row-grid-{row.index}"
         )  # fmt: skip
+        if row.grid_from and (row.grid or "").strip() == row.filled_grid:
+            ui.label(f"from {row.grid_from}").classes("text-caption text-grey").mark(
+                f"row-grid-from-{row.index}"
+            )
         ui.label(f"Published: {row.published}" if row.published else "").classes("text-grey")
         show()
         for warning in row.warnings:

@@ -425,8 +425,12 @@ class NetRepository:
         replace_session_id: int | None = None,
         controller: RosterRow | None | Literal["from rows"] = "from rows",
         replace_grids: dict[str, str] | None = None,
+        looked_up: frozenset[str] = frozenset(),
     ) -> Session:
-        """controller: the session's controller when the caller knows it, e.g. a row the
+        """looked_up: callsigns whose grid came from the database or QRZ, not the roster
+        text; it goes on the check-in but never into a roster-learned station record.
+
+        controller: the session's controller when the caller knows it, e.g. a row the
         operator left out of the check-ins (the NCS often is); by default, the kept row
         marked as controller. replace_grids: callsign to grid, where the operator chose to
         replace a grid learned from an earlier roster (decision 40); a saved record is
@@ -470,7 +474,8 @@ class NetRepository:
                     (session_id, sequence, call, row.name, row.grid, row.qth,
                      row.published_bearing),
                 )  # fmt: skip
-                _insert_roster_station(self._conn, call, row.name, row.grid, row.qth)
+                learned = None if call in looked_up else row.grid
+                _insert_roster_station(self._conn, call, row.name, learned, row.qth)
             for call, grid in (replace_grids or {}).items():
                 self._conn.execute(
                     "UPDATE station SET grid = ?, lat = NULL, lon = NULL, updated_at = ?"
