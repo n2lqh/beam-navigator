@@ -109,7 +109,7 @@ Until a station is active, opening Beam Navigator shows **Welcome to Beam Naviga
 
 ## The dashboard
 
-Type a target in the big **Target** box and press Enter. You see what it resolved to and where that came from, the **true bearing** (one decimal place), the 16-point compass name, and the **distance** in your units. On bands set to long path (10 m and 6 m by default; Settings → Bands), the long-path bearing and distance are shown too.
+Type a target in the big **Target** box and press Enter. You see what it resolved to and where that came from, its **grid** when it has one, the **true bearing** (one decimal place), the 16-point compass name, and the **distance** in your units. On bands set to long path (10 m and 6 m by default; Settings → Bands), the long-path bearing and distance are shown too.
 
 ### What you can type
 
@@ -140,7 +140,7 @@ With a rotator set up for the selected band (Settings → Rotators), the button 
 
 After a net, the controller usually publishes the roll call. Choose **Import**, paste the list (or **Paste from clipboard**), choose the net and date, and press **Parse**. No net yet? **New net** on the same page creates one.
 
-The review table shows each station with its bearing and distance **from you**. A bearing printed in the roster is shown as **Published** for reference only. You can fix names and grids, leave rows out and pick the net controller. Anything Beam Navigator can't read is kept as an "Unparsed text" row, never thrown away. Press **Save**.
+The review table shows each station with its bearing and distance **from you**. A bearing printed in the roster is shown as **Published** for reference only. A station the roster gives no grid for is filled in from your saved records, then from QRZ (when automatic QRZ lookup is on, one call at a time), and the row says **from saved record** or **from QRZ**; such a grid goes with this session but is never saved as if the roster had said it. You can fix names and grids, leave rows out and pick the net controller. Anything Beam Navigator can't read is kept as an "Unparsed text" row, never thrown away. Press **Save**.
 
 The stations and grids are saved for next time (a roster never overwrites a station you saved yourself), and the original text is kept with the session. If a station's grid came from an earlier roster and this roster gives a different one, the row shows **Replace earlier roster grid …**: tick it to use the new grid, or leave it to keep the old one. Importing the same text again for the same net and date asks whether to **Replace** it or **Keep both**.
 
@@ -154,7 +154,7 @@ Example nets are labelled **Example — unverified**. When you have checked one,
 
 ## Following a net (live net screen)
 
-Open a session to follow the net. The **Beam** panel is on the left (at the top on a narrow window); everything you pick from is on the right.
+Open a session to follow the net. The **Beam** panel is on the left (at the top on a narrow window); everything you pick from is on the right: **Find or point at** and **I hear** at the top, then the Tonight and Regulars lists, so the boxes stay in view however long the list gets.
 
 **One idea: there is one Target.** Whatever you picked last is the Target, and **Rotate** turns the antenna to it. The Target card always says who it is, which way, and where it came from (Net control, Tonight list, Regulars, Typed or I hear). Clicking, typing and pressing Enter never move the antenna; only **Rotate** (Ctrl+Enter) and **Rotate to net control** (Home) do. If Rotate is greyed out, the sentence under it says why.
 
@@ -167,7 +167,7 @@ Open a session to follow the net. The **Beam** panel is on the left (at the top 
 - **Rotate to net control** (or Home) makes net control the Target and turns the beam in one press.
 - **Net control is calling**: when the controller announces a direction ("anyone to the northeast?"), press its number-pad key (8 N, 9 NE, 6 E, 3 SE, 2 S, 1 SW, 4 W, 7 NW) or click it. If it is your sector, a large **YOUR SECTOR IS UP** banner appears. It is worked out from net control's location directly, not by adding 180°, and it never claims the controller can hear you. If net control's location is unknown, it says "Controller location unknown — can't tell if this call is for you."
 - **Find or point at**: type a callsign, grid, alias or direction (`270`, `W`) and press Enter. The bearing appears and it becomes the Target ("Typed"), but nothing turns until you press Rotate (or Ctrl+Enter, which works straight after Enter). While you type, both lists below narrow to matching stations; clear the box to see everyone. A callsign not yet in tonight's list offers **Add to tonight**.
-- **I hear**: the same boxes as the net control entry line (Callsign → Name → Grid → QTH → Report → Notes). Type the callsign of a station you hear, Enter to fill its details from what Beam Navigator knows, Enter again to log it. The station is marked Heard and remembered for the next net. **Direction** shows which way they are as soon as there is a grid; **Aim to <call>** makes them the Target (nothing turns until you press Rotate or Ctrl+Enter).
+- **I hear**: the same boxes as the net control entry line (Callsign → Name → Grid → QTH → Report → Notes). Type the callsign of a station you hear and pause: its details fill in from what Beam Navigator knows (then QRZ), with no need to step through the boxes; Enter logs it. A new callsign clears the line, so the last station's grid or report never sticks to the next one. The station is marked Heard and remembered for the next net. **Direction** shows which way they are as soon as there is a grid; **Aim to <call>** makes them the Target (nothing turns until you press Rotate or Ctrl+Enter).
 - Mark each station **Heard**, **Weak**, **Not heard** or **Via relay**. These are private to you.
 - **Tonight** lists the stations in this session; sort it by **Check-in order**, **Callsign**, **Direction** or **Distance**.
 - **Regulars not heard yet** lists everyone who has checked in to this net before, with bearing, distance, attendance and last check-in. Sort by **Last check-in**, **Callsign**, **Grid** or **Direction**. Click a regular to make them the Target; press **Heard** to add them to tonight.

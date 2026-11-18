@@ -611,3 +611,13 @@ async def test_i_hear_fills_after_a_pause_without_enter(
     press_enter(user, "callsign")  # one Enter logs: the details are already there
     await user.should_see("Logged W2KV")
     assert sim.commands == []
+
+
+async def test_find_and_i_hear_sit_above_the_lists(user: User, desk: Desk, w2kv: int) -> None:
+    # owner, 2026-11-18: with a long Tonight list both must stay on screen
+    await open_net(user, desk, w2kv)
+    [aim] = user.find(marker="aim").elements
+    [i_hear] = user.find(marker="entry-callsign").elements
+    [tonight] = user.find(marker="tonight-sort").elements
+    [regulars] = user.find(marker="regular-sort").elements
+    assert aim.id < i_hear.id < tonight.id < regulars.id  # drawn top to bottom

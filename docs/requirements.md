@@ -59,7 +59,7 @@ Key rules:
 ### 4.1 Bearing lookup (dashboard)
 
 One large input box. Type a target, press Enter, and see:
-- Resolved target and its source.
+- Resolved target and its source, and its grid when it has one (owner, 2026-11-18).
 - True bearing (one decimal), compass name (16-point), and distance in miles or km.
 - For 10 m and 6 m: long-path bearing and distance as well, labeled. Configurable per band.
 - A Rotate button showing the exact heading and rotator ("Rotate VHF to 294.6°"), when a live or simulated rotator is configured for the selected band.
@@ -97,12 +97,13 @@ Parser requirements:
 - Handles portable calls (`K1ABC/P`, `EA/K1ABC`) without treating suffixes as grids.
 - Recognizes `(Net Control)`, `NC` and similar controller tags. Never assumes the last or first row is the controller without flagging it as a suggestion.
 - Preserves grid text exactly as given for display; matches case-insensitively.
+- A missing grid is filled from the saved station record or a stored QRZ answer, then from QRZ when automatic lookup is on; the row names the source, the grid goes on the check-in, and it is never saved as roster-learned (owner, 2026-11-18; decision 47).
 - Flags, never drops: duplicate callsigns, missing grids, conflicting grids versus saved records, unparseable fragments (kept as "unparsed text" rows).
 
 ### 4.4 Live net screen (participant)
 
 - **One Target (owner, 2026-11-01; decision 46).** Whatever was picked last is the Target: net control when the screen opens, a Tonight or Regulars row, Enter in Find or point at, or Aim on the I-hear line. A **Target** card always says who, which way, and where it came from. **Rotate** turns to it; when Rotate can't, a sentence says why. There is no Follow mode.
-- Two columns on a wide window: the **Beam** panel (Target, Rotate, Rotate to net control, rotator, compass), then everything to pick from.
+- Two columns on a wide window: the **Beam** panel (Target, Rotate, Rotate to net control, rotator, compass), then everything to pick from: Find or point at and I hear at the top, then the lists (owner, 2026-11-18).
 - Header: net, frequency, and one **Net control** line: `Net control: CALL · NNN.N° X · distance` with **Change…**, `CALL — location unknown` with **Add grid…**, or `not set` with **Set net control…**. Controller → user is calculated directly from controller to user, not by adding 180°, and is used by the announced-sector check.
 - Check-in table: callsign, name, grid, bearing from user, distance, heard state. Sort by roster order, bearing, distance or callsign. Filter by text.
 - **Announced sector:** the user records the controller's announced sector with one key (number-pad layout: 8 N, 9 NE, 6 E, 3 SE, 2 S, 1 SW, 4 W, 7 NW) or by clicking a compass rose. When it matches the user's sector as seen from the controller (default tolerance ±22.5°), a large banner shows **"YOUR SECTOR IS UP."** If the controller location is unknown: "Controller location unknown — can't tell if this call is for you." The banner never claims the controller can hear the user.
@@ -113,7 +114,7 @@ Parser requirements:
   - **Find or point at:** one box takes a callsign, grid, alias or direction, resolved as on the dashboard. Enter shows the bearing and makes it the Target ("Typed") but never rotates; Ctrl+Enter or Rotate then turns the beam. While typing, the box also filters both lists by callsign, name or grid. A typed callsign not yet in tonight's list offers **Add to tonight**, which puts it on the I-hear line.
   - **Regulars not heard yet:** everyone who has checked in to this net before and is not in tonight's list, with name, grid, bearing and distance from the user, attendance and last check-in. Sort by **Last check-in** (default, newest first), **Callsign**, **Grid** or **Direction**; unknown grids and bearings sort last, ties by callsign. Clicking a row makes it the Target. **Heard** adds the station to tonight.
   - **Tonight** sorts by **Check-in order** (default), **Callsign**, **Direction** or **Distance**. The separate Filter box and the general Sort select are gone.
-  - **I hear:** Callsign → Name → Grid → QTH → Report → Notes, the net control entry line itself (same keys, auto-fill, partial-call matching, duplicate check, session-only or update-record choice, QRZ). Each station is logged to this session as Heard, so it is a regular at the next session. Beside the line, **Direction** shows the bearing and distance to the station (the grid typed there, else its saved grid), and **Aim to <call>** makes it the Target ("I hear") without rotating (decision 43).
+  - **I hear:** Callsign → Name → Grid → QTH → Report → Notes, the net control entry line itself (same keys, auto-fill, partial-call matching, duplicate check, session-only or update-record choice, QRZ). Each station is logged to this session as Heard, so it is a regular at the next session. Beside the line, **Direction** shows the bearing and distance to the station (the grid typed there, else its saved grid), and **Aim to <call>** makes it the Target ("I hear") without rotating (decision 43). On this line a new callsign clears the other boxes, and a 0.8 s pause on a whole callsign fills its details (database, then QRZ, without warnings) with no Enter (decision 47).
   - **Close my session…** with **Notes for next time**. The session turns read-only (Find or point at, Rotate, Rotate to net control and Use for tonight still work) until **Reopen**. The next session of the same net shows the notes as **Last time (date)** on the live net and net control screens; a newest closed session with no notes shows no card. Closing notes are private and never exported.
 
 ### 4.5 Net controller screen
@@ -133,7 +134,7 @@ Keyboard-first entry line, modeled on contest loggers such as N1MM Logger+:
 
 ### 4.6 Nets and history
 
-- Net list with add, edit, duplicate, archive, import/export (`*.beamnet.json`, schema-versioned).
+- Net list with add, edit, duplicate, archive, import/export (`*.beamnet.json`, schema-versioned). Ordered from today through the week: today's nets first (favourites, then start time), unscheduled last (owner, 2026-11-18).
 - Net view: next occurrence, default controller, past sessions, and known participants (callsign, last grid, sessions attended, last seen).
 - Participants from history are shown as **expected**, never as checked in, until they check in this session.
 - Example nets (Pack Rats schedule) are offered at first run, opt-in, labeled unverified. (The Welcome wizard offers them; decision 35.)

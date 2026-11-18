@@ -510,9 +510,9 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                             heard.on("click", js_handler=BLUR)
                             heard.set_enabled(not view.closed)
 
-                lists()
-
-                # Stations the operator hears, logged as on net control's screen.
+                # Stations the operator hears, logged as on net control's screen; placed with
+                # Find or point at, above the lists, so both stay on screen however long
+                # Tonight gets (owner, 2026-11-18).
                 i_hear = EntryLine(
                     control, session_id, qrz=qrz, on_logged=lambda: lists.refresh(),
                     heard=True, on_callsign=lambda: heard_aim.refresh(),
@@ -543,6 +543,8 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
 
                 heard_aim()
                 i_hear.set_enabled(not first.closed)
+                ui.separator().classes("mt-2")
+                lists()
 
 
 def _unlocated(view: LiveNetView, state: _State) -> str:
