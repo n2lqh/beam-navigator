@@ -179,6 +179,16 @@ class LiveNet:
         found = self.desk.bearing_to(self._grid(call, grid.strip())[0])
         return None if found is None else (call, found)
 
+    def controller_pointing(self, session_id: int, callsign: str, grid: str = "") -> str | None:
+        """The 8-point sector net control points to reach this station (owner, 2026-11-21):
+        the typed grid, else the saved record. None when either end has no location."""
+        start = self.controller_location(session_id)
+        call = normalize_callsign(callsign) if callsign.strip() else ""
+        found = self._grid(call, grid.strip())[0] if call or grid.strip() else None
+        if start is None or found is None:
+            return None
+        return sector_name(short_path(start, grid_center(found)).bearing_deg)
+
     def announce(self, session_id: int, sector: str) -> SectorCheck:
         """Records nothing and moves nothing: it only answers "is this call for me?"."""
         controller = self._controller(self.nets.get_session(session_id))

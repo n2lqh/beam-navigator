@@ -395,3 +395,21 @@ def test_save_for_net_on_closed_session(conn: sqlite3.Connection, live: LiveNet,
     assert nets.get_session(w2kv).status == "closed"
     assert nets.checkins(w2kv) == before
     assert nets.get_net(nets.get_session(w2kv).net_id).default_controller_call == "KD8UD"
+
+
+def test_net_control_pointing_at_a_called_station(live: LiveNet, w2kv: int) -> None:
+    # owner, 2026-11-21: net control calls a station by name; light the way he points
+    from beam_navigator.core.sector import sector_name
+
+    to_k4so = short_path(grid_center("FN20ok"), grid_center("FM18ap")).bearing_deg
+    assert live.controller_pointing(w2kv, "k4so") == sector_name(to_k4so)
+    typed = short_path(grid_center("FN20ok"), grid_center("EN52")).bearing_deg
+    assert live.controller_pointing(w2kv, "K9ZZZ", "EN52") == sector_name(typed)
+    assert live.controller_pointing(w2kv, "K9ZZZ") is None  # no location: nothing guessed
+
+
+def test_no_pointing_without_net_controls_location(conn: sqlite3.Connection, live: LiveNet) -> None:
+    session = import_fixture(
+        conn, add_net(conn, "222 activity", "1.25 m"), "wa3nuf_222mhz_activity_2026-10-21.txt"
+    )
+    assert live.controller_pointing(session, "K4SO", "FM18ap") is None
