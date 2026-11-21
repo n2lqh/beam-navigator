@@ -441,6 +441,11 @@ class NetRepository:
             if controller == "from rows"
             else controller
         )
+        if chosen is not None:
+            call, grid = chosen.callsign, chosen.grid
+        else:  # none named: the net's saved net control, as a new session gets (owner, 2026-11-21)
+            net = self.get_net(net_id)
+            call, grid = net.default_controller_call, net.default_controller_grid
         with self._conn:  # one transaction: all of it or none of it
             if replace_session_id is not None:
                 # Only an earlier import of this same net and date may be replaced; a
@@ -461,8 +466,7 @@ class NetRepository:
             cursor = self._conn.execute(
                 "INSERT INTO session (net_id, date, controller_call, controller_grid, status,"
                 " raw_text, created_at) VALUES (?, ?, ?, ?, 'imported', ?, ?)",
-                (net_id, date, chosen.callsign if chosen else None,
-                 chosen.grid if chosen else None, raw_text, _now()),
+                (net_id, date, call, grid, raw_text, _now()),
             )  # fmt: skip
             session_id = cast(int, cursor.lastrowid)
             for position, row in enumerate(result.checkins, start=1):

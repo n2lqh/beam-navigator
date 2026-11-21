@@ -104,3 +104,12 @@ def test_expected_matches_base_callsign() -> None:
     tonight = nets.start_session(net.id, "2026-11-02").id
     nets.add_checkin(tonight, "W1ABC/M")
     assert [p.callsign for p in nets.expected(tonight)] == []
+
+
+def test_import_without_a_controller_uses_the_nets_saved_one(nets: NetRepository) -> None:
+    # owner, 2026-11-21: an imported session had no net control though the net had one
+    net_id = two_metre_net(nets)
+    session = nets.import_roster(
+        net_id, "2026-10-26", W2KV_TEXT, parse_roster(W2KV_TEXT), controller=None
+    )
+    assert (session.controller_call, session.controller_grid) == ("W2KV", "FN20ok")

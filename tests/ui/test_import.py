@@ -198,3 +198,29 @@ async def test_import_without_qrz_login_stays_quiet(
     await user.should_see("From you:")
     await user.should_not_see("QRZ filled")
     await user.should_not_see("Set up your QRZ login")
+
+
+WA3NUF = (Path(__file__).parents[1] / "fixtures" / "wa3nuf_222mhz_activity_2026-10-21.txt"
+          ).read_text(encoding="utf-8")  # fmt: skip
+
+
+async def test_net_control_list_offers_the_nets_saved_one(
+    user: User, desk: Desk, conn: sqlite3.Connection
+) -> None:  # owner, 2026-11-21: a net control saved for the net never showed on Import
+    nets = NetRepository(conn)
+    net = nets.save_net(
+        Net(None, "DVFRC 50", None, None, None, 50.125, None, None, "6 m", "K3WWT", "FM29iv",
+            False)  # fmt: skip
+    )
+    register_pages(lambda: desk)
+    await user.open("/import")
+    pick(user, "roster-text", WA3NUF)  # this roster names no net control
+    pick(user, "date", "2026-10-21")
+    user.find(marker="parse").click()
+    await user.should_see("From you:")
+    pick(user, "net", net.id)  # picked after parsing: the list follows the net
+    await user.should_see("K3WWT (saved for this net)")
+    user.find(marker="save").click()
+    await user.should_see("Saved")
+    [session] = nets.sessions(net.id or 0)
+    assert session[0].controller_call == "K3WWT"

@@ -11,6 +11,8 @@ from beam_navigator.qrz_login import NO_STORE
 from beam_navigator.roster_review import Review, ReviewRow, RosterReview
 from beam_navigator.store.repositories import NetRepository
 
+NET_SAVED = -1  # the net's saved net control, not a roster row
+
 
 def _error(exc: Exception) -> None:
     ui.notify(str(exc), type="negative", multi_line=True)
@@ -164,17 +166,32 @@ def import_page(
                 return
             for warning in current.warnings:
                 ui.label(warning).classes("text-warning")
-            callers = {row.index: row.callsign for row in current.rows if row.callsign}
+            callers: dict[int, str] = {
+                row.index: row.callsign for row in current.rows if row.callsign
+            }
             chosen = next((row.index for row in current.rows if row.is_controller), None)
+            # The net's saved net control, used when the roster names none (owner, 2026-11-21).
+            saved = None
+            if net_select.value is not None:
+                saved = nets.get_net(net_select.value).default_controller_call
+            if saved and chosen is None:
+                chosen = next((i for i, call in callers.items() if call == saved), NET_SAVED)
+                if chosen != NET_SAVED:
+                    review.set_controller(current, chosen)
+            if saved and saved not in callers.values():
+                callers = {NET_SAVED: f"{saved} (saved for this net)", **callers}
             suggestion = " (suggested by the roster)" if current.controller_suggested else ""
             ui.select(
                 callers, value=chosen, label=f"Net controller{suggestion}", clearable=True,
-                on_change=lambda e: review.set_controller(current, e.value),
+                on_change=lambda e: review.set_controller(
+                    current, None if e.value == NET_SAVED else e.value
+                ),
             ).classes("w-64").mark("controller")  # fmt: skip
             for row in current.rows:
                 _review_row(review, row)
 
         table()
+        net_select.on_value_change(lambda: table.refresh())
         ui.button("Save", on_click=lambda: save()).props("size=lg").mark("save")
         saved_link = ui.column()
 
