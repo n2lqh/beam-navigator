@@ -368,7 +368,8 @@ def main(argv: list[str] | None = None) -> None:
         if getattr(sys, "frozen", False):
             message_box(message)
         raise SystemExit(1) from exc
-    log_without_console(data_dir)
+    home.mkdir(parents=True, exist_ok=True)
+    log_without_console(home)  # each PC its own log, even with a shared data folder
 
     def open_desk() -> Desk:
         conn = open_db(data_dir / DB_FILE)

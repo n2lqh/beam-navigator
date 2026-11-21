@@ -71,7 +71,7 @@ To update, run the new `BeamNavigatorSetup.exe`; it replaces the program (it ask
 
 The release also has the plain program, `BeamNavigator.exe`, for running without installing: put it anywhere and double-click it. It has no Start menu entry.
 
-To give the program options such as `--port` (below), open a Command Prompt in the folder where `BeamNavigator.exe` is (the installer puts it in `%LOCALAPPDATA%\Programs\Beam Navigator`) and type, for example, `BeamNavigator.exe --port 8090`. What the server would have printed goes to `beamnav.log` in the data folder.
+To give the program options such as `--port` (below), open a Command Prompt in the folder where `BeamNavigator.exe` is (the installer puts it in `%LOCALAPPDATA%\Programs\Beam Navigator`) and type, for example, `BeamNavigator.exe --port 8090`. What the server would have printed goes to `beamnav.log` in this PC's own data folder (below).
 
 To build the program and installer yourself from the project folder (with the app stopped, and Inno Setup 6 installed once with `winget install --id JRSoftware.InnoSetup --exact --scope user`): `uv run python packaging/build_windows.py`. The files appear in `dist`.
 
