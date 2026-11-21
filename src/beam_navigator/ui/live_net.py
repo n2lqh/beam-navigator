@@ -20,7 +20,6 @@ from beam_navigator.live_net import (
     RegularSort,
     SortKey,
     controller_line,
-    filter_rows,
     sort_regulars,
     sort_rows,
 )
@@ -56,8 +55,8 @@ BLUR_ACTIVE = "() => document.activeElement && document.activeElement.blur()"
 # selecting rebuilds the table, which would close the select's menu as it opens.
 # Clicks on a row's own button (Heard) are that button's, not the row's.
 ROW_CLICK = "(e) => { if (!(e.target.closest('.q-field') || e.target.closest('.q-btn'))) emit(e) }"
-# Enter in Find or point at looks the text up, then leaves the box so Ctrl+Enter rotates next.
-AIM_ENTER = "(e) => { emit(); e.target.blur() }"
+POINTING = "Net control is pointing"  # + the sector (owner, 2026-11-21)
+PRESS_DIRECTION = "Press the direction net control is calling, or type the call"
 
 
 def _error(exc: Exception) -> None:
@@ -71,14 +70,14 @@ class _State:
     callsign: str | None = None  # a regular not heard yet
     source: str = NET_CONTROL  # where the Target came from, shown on the Target card
     typed: tuple[str, float] | None = None
+    typed_name: str | None = None  # a call on the line with no location yet
     rotator_id: int | None = None
     outcome: RotateOutcome | None = None
     watched_id: int | None = None
     pressed_at: float = 0.0
     sort: SortKey = "roster"
     regular_sort: RegularSort = "last"
-    filter_text: str = ""
-    aim_call: str | None = None  # a typed callsign not in tonight's list yet
+    pointing: str | None = None  # the sector lit on the compass
 
 
 def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = None) -> None:
@@ -128,7 +127,23 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
             stop_watching()
             pressed(live.snap_back(session_id, state.rotator_id))
 
+    def point(sector: str | None) -> None:
+        """Lights the sector net control points to; records and moves nothing."""
+        state.pointing = sector
+        legend.set_text(f"{POINTING} {sector}" if sector else POINTING)
+        for name, button in compass.items():
+            button.props(remove="outline unelevated")
+            button.props("unelevated" if name == sector else "outline")
+        if sector is None:
+            banner.set_text(PRESS_DIRECTION)
+            banner.classes(replace="")
+        else:
+            announce(sector)
+
     def announce(sector: str) -> None:
+        if state.pointing != sector:
+            point(sector)
+            return
         result = live.announce(session_id, sector)
         banner.set_text(f"{sector}: {result.message}")
         banner.classes(
@@ -144,39 +159,51 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
     def select_row(checkin_id: int) -> None:
         state.selected = checkin_id
         pick("station", TONIGHT)
+        row = next((r for r in live.view(session_id).rows if r.checkin_id == checkin_id), None)
+        if row is not None:
+            point(live.controller_pointing(session_id, row.callsign))
 
     def select_regular(callsign: str) -> None:
         state.callsign = callsign
         pick("regular", REGULARS)
+        point(live.controller_pointing(session_id, callsign))
 
-    def aim_enter() -> None:
-        """Looks the typed text up and makes it the target. Never rotates (invariant 2)."""
-        text = (aim.value or "").strip()
-        view, target = live.aim(session_id, text)
+    def point_at(text: str) -> None:
+        """Enter on a grid, alias or direction in the one box: it becomes the Target. Never
+        rotates (invariant 2) and never logs."""
+        view, target = live.aim(session_id, text.strip())
         parts = [view.title, view.bearing_text, view.distance_text, view.message]
         aim_result.set_text(view.error or " · ".join(p for p in parts if p))
-        tonight = {row.callsign for row in live.view(session_id).rows}
-        call = normalize_callsign(text) if is_callsign(text) else None
-        state.aim_call = call if call and call not in tonight else None
-        add_tonight.set_visibility(state.aim_call is not None)
-        if target is not None:
-            state.typed = target
-            pick("typed", TYPED)
-        elif state.typed is not None:
-            # Never leave Rotate on an earlier typed target while showing this one.
-            state.typed = None
-            controls.refresh()
+        # None too: never leave Rotate on an earlier typed target while showing this one.
+        state.typed, state.typed_name = target, None
+        pick("typed", TYPED)
+
+    def line_changed() -> None:
+        """A whole call on the line is the Target at once, located or not, and lights where
+        net control points to reach it (owner, 2026-11-21). Never rotates. An emptied line
+        (after logging) keeps the Target, so Rotate still points there."""
+        heard_aim.refresh()
+        call = i_hear.callsign
+        if not is_callsign(call):
+            return
+        aim_result.set_text("")
+        grid = i_hear.entry().grid
+        found = live.heard_aim(call, grid)
+        target = None if found is None else (found[0], found[1].deg)
+        name = normalize_callsign(call)
+        now = ("typed", I_HEAR, target, name)
+        if (state.mode, state.source, state.typed, state.typed_name) != now:
+            state.typed, state.typed_name = target, name
+            pick("typed", I_HEAR)
+        sector = live.controller_pointing(session_id, call, grid)
+        if sector != state.pointing:
+            point(sector)
 
     def aim_heard(found: tuple[str, Bearing] | None) -> None:
-        """Aim on the I-hear line: that station becomes the typed target. Never rotates."""
+        """Aim to <call>: back to the station on the line after picking another."""
         if found is not None:
-            state.typed = (found[0], found[1].deg)
+            state.typed, state.typed_name = (found[0], found[1].deg), found[0]
             pick("typed", I_HEAR)
-
-    def add_aimed_tonight() -> None:
-        """Puts the typed call on the I-hear line; logging it is still the operator's Enter."""
-        if state.aim_call is not None:
-            i_hear.fill_callsign(state.aim_call)
 
     def heard_regular(callsign: str) -> None:
         """Heard: adds the regular to tonight as on the I-hear line, from their record."""
@@ -233,10 +260,6 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
             snap_back()
         elif isinstance(action, tuple):
             announce(action[1])
-
-    def set_filter(text: str | None) -> None:
-        state.filter_text = text or ""
-        lists.refresh()
 
     def set_sort(key: SortKey) -> None:
         state.sort = key
@@ -404,40 +427,26 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                 # Fixed keys (decision 22); ignored while a field or button has focus.
                 ui.keyboard(on_key=on_key, repeating=False)
 
-                ui.label("Net control is calling").classes("text-overline mt-2")
+                legend = ui.label(POINTING).classes("text-overline mt-2").mark("pointing")
+                compass: dict[str, ui.button] = {}
                 with ui.grid(columns=3).classes("gap-1"):
                     for line in COMPASS_LAYOUT:
                         for sector in line:
                             if sector:
-                                ui.button(sector, on_click=lambda s=sector: announce(s)).mark(
-                                    f"sector-{sector}"
-                                ).on("click", js_handler=BLUR)
+                                compass[sector] = ui.button(
+                                    sector, on_click=lambda s=sector: point(s)
+                                ).props("outline").mark(f"sector-{sector}")
+                                compass[sector].on("click", js_handler=BLUR)
                             else:
                                 ui.label("")
-                banner = ui.label("Press the direction net control is calling").mark("banner")
+                banner = ui.label(PRESS_DIRECTION).mark("banner")
 
             # Everything you pick from.
-            with ui.column().classes("gap-2 grow basis-0 min-w-0 w-full"):
-                ui.label("Find or point at").classes("text-overline")
-                # Also the filter for both lists (owner, 2026-10-30).
-                with ui.row().classes("items-center gap-4 w-full"):
-                    aim = (
-                        ui.input("Call, grid, alias or direction",
-                                 on_change=lambda e: set_filter(e.value))
-                        .props("clearable outlined dense").classes("w-80").mark("aim")
-                    )  # fmt: skip
-                    aim.on("keydown.enter", aim_enter, js_handler=AIM_ENTER)
-                    aim_result = ui.label("").mark("aim-result")
-                    add_tonight = ui.button("Add to tonight", on_click=add_aimed_tonight).props(
-                        "flat dense"
-                    ).mark("add-tonight")  # fmt: skip
-                    add_tonight.on("click", js_handler=BLUR)
-                    add_tonight.set_visibility(False)
-
+            with ui.column().classes("gap-2 grow basis-0 min-w-0 w-full overflow-x-auto"):
                 @ui.refreshable
                 def lists() -> None:
                     view = live.view(session_id)
-                    rows = filter_rows(sort_rows(view.rows, state.sort), state.filter_text)
+                    rows = sort_rows(view.rows, state.sort)
                     with ui.row().classes("items-end gap-4 mt-2"):
                         ui.label(f"Tonight ({len(view.rows)})").classes("text-lg")
                         ui.select(
@@ -474,9 +483,7 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                             if row.heard == "relay":
                                 ui.label(f"via {row.relay_call}")
 
-                    regulars = filter_rows(
-                        sort_regulars(view.regulars, state.regular_sort), state.filter_text
-                    )
+                    regulars = sort_regulars(view.regulars, state.regular_sort)
                     with ui.row().classes("items-end gap-4 mt-4"):
                         ui.label(f"Regulars not heard yet ({len(view.regulars)})").classes(
                             "text-lg"
@@ -510,16 +517,18 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                             heard.on("click", js_handler=BLUR)
                             heard.set_enabled(not view.closed)
 
-                # Stations the operator hears, logged as on net control's screen; placed with
-                # Find or point at, above the lists, so both stay on screen however long
-                # Tonight gets (owner, 2026-11-18).
+                # One box (owner, 2026-11-21): a call is looked up, becomes the Target and
+                # Enter checks it in; a grid, alias or direction is pointed at. Above the
+                # lists, so it stays on screen however long Tonight gets (2026-11-18).
                 i_hear = EntryLine(
                     control, session_id, qrz=qrz, on_logged=lambda: lists.refresh(),
-                    heard=True, on_callsign=lambda: heard_aim.refresh(),
+                    heard=True, on_callsign=lambda: line_changed(), on_point=point_at,
+                    callsign_label="Call or grid", on_rotate=rotate,
                 )  # fmt: skip
-                ui.label("I hear").classes("text-overline mt-2")
-                with ui.column().classes("gap-1"):
+                ui.label("I hear · call, grid, alias or direction").classes("text-overline")
+                with ui.column().classes("gap-1 w-full"):
                     i_hear.fields()
+                aim_result = ui.label("").mark("aim-result")
 
                 @ui.refreshable
                 def heard_aim() -> None:
@@ -554,6 +563,8 @@ def _unlocated(view: LiveNetView, state: _State) -> str:
         name = next((r.callsign for r in view.rows if r.checkin_id == state.selected), "")
     elif state.mode == "regular":
         name = state.callsign or ""
+    elif state.mode == "typed":
+        name = state.typed_name or ""
     if state.mode == "controller" or not name:
         return NO_TARGET
     return f"{name} — grid needed: type a grid, or pick another station."

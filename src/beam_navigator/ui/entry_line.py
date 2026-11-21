@@ -32,16 +32,16 @@ ACTIVE = "entry-active ring-2 ring-primary"
 PAUSE_S = 0.8  # I-hear line: look the call up once typing stops this long (owner, 2026-11-18)
 
 
-def _keys_js(keymap: Keymap, space_advances: bool) -> str:
-    """Send only the entry line's bound keys to the server, and stop their browser
-    default; every other key types as usual (decision 33)."""
+def _keys_js(keymap: Keymap, space_advances: bool, extra: tuple[str, ...] = ()) -> str:
+    """Send only the entry line's bound keys (and extra screen actions) to the server,
+    and stop their browser default; every other key types as usual (decision 33)."""
 
     def js(on: bool) -> str:
         return "true" if on else "false"
 
     chords = ", ".join(
         f"['{c.code}', {js(c.ctrl)}, {js(c.alt)}, {js(c.shift)}]"
-        for c in (keymap[action] for action in ENTRY_ACTIONS)
+        for c in (keymap[action] for action in (*ENTRY_ACTIONS, *extra))
     )  # codes are plain letters and digits (core.keymap), so they are safe to inline
     space = "false"
     if space_advances:
@@ -75,9 +75,13 @@ class _State:
 class EntryLine:
     """Build it, then place fields() and (with QRZ) qrz_button() where the page wants them.
 
+    on_rotate: the screen's Rotate key works from these boxes too, an explicit press
+    (owner, 2026-11-21: type the call net control gives, then Ctrl+Enter).
     on_callsign runs whenever the typed call or its details change (the info panel);
     on_logged after each log or update; on_note when the station-note key is pressed.
-    heard=True logs through NetControl.log_heard (the participant's line).
+    heard=True logs through NetControl.log_heard (the participant's line). on_point: Enter
+    on callsign-box text that is no callsign (a grid, alias or direction) goes there instead
+    of logging, so one box both checks in and points (owner, 2026-11-21).
     """
 
     def __init__(
@@ -91,6 +95,9 @@ class EntryLine:
         on_callsign: Callable[[], object] = lambda: None,
         on_note: Callable[[], object] | None = None,
         heard: bool = False,
+        on_point: Callable[[str], object] | None = None,
+        callsign_label: str = LABELS["callsign"],
+        on_rotate: Callable[[], object] | None = None,
     ) -> None:
         self.control = control
         self.session_id = session_id
@@ -100,6 +107,9 @@ class EntryLine:
         self.on_callsign = on_callsign
         self.on_note = on_note
         self.heard = heard
+        self.on_point = on_point
+        self.callsign_label = callsign_label
+        self.on_rotate = on_rotate
         self.state = _State()
         self.keymap = control.desk.keymap()  # the key filter is built from these
         self.inputs: dict[str, ui.input] = {}
@@ -296,11 +306,20 @@ class EntryLine:
             ui.notify("Keys were changed in Settings. Reload this page to use them.",
                       type="warning")  # fmt: skip
             return
-        action = key_action(
-            name, str(args.get("code", "")), bool(args.get("ctrlKey")), bool(args.get("altKey")),
-            bool(args.get("shiftKey")), self.keymap,
+        code, ctrl = str(args.get("code", "")), bool(args.get("ctrlKey"))
+        alt, shift = bool(args.get("altKey")), bool(args.get("shiftKey"))
+        if self.on_rotate is not None and self.keymap["rotate"].matches(code, ctrl, alt, shift):
+            self.on_rotate()
+            return
+        action = key_action(name, code, ctrl, alt, shift, self.keymap)
+        pointing = (
+            self.on_point is not None and name == "callsign" and action in ("next", "log")
+            and state.highlighted is None and bool(self.callsign)
+            and not is_callsign(self.callsign)
         )  # fmt: skip
-        if action == "next":
+        if pointing and self.on_point is not None:
+            self.on_point(self.callsign)
+        elif action == "next":
             if name == "callsign":
                 self.advance_from_callsign()
             else:
@@ -443,17 +462,21 @@ class EntryLine:
         for line in lines:
             if not line:
                 continue
-            with ui.row().classes("gap-2 no-wrap"):
+            with ui.row().classes("gap-2"):  # wraps on a narrow window (owner, 2026-11-21)
                 for name in line:
                     box = (
-                        ui.input(LABELS[name]).props("outlined dense")
+                        ui.input(self.callsign_label if name == "callsign" else LABELS[name])
+                        .props("outlined dense")
                         .classes(WIDTHS[name]).mark(f"entry-{name}")
                     )  # fmt: skip
                     box.on_value_change(lambda _, n=name: self.edited(n))
                     box.on(
                         "keydown",
                         lambda e, n=name: self.on_key(n, e),
-                        js_handler=_keys_js(self.keymap, name in ("callsign", "grid")),
+                        js_handler=_keys_js(
+                            self.keymap, name in ("callsign", "grid"),
+                            ("rotate",) if self.on_rotate is not None else (),
+                        ),  # fmt: skip
                     )
                     self.inputs[name] = box
         self.message = ui.label("").classes("text-warning")

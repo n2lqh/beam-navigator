@@ -7,7 +7,7 @@ and snap_back() move the rotator, once per press (invariant 2).
 
 import sqlite3
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Literal
 
 from beam_navigator.core.callsign import normalize_callsign
 from beam_navigator.core.geometry import short_path
@@ -115,26 +115,6 @@ def sort_regulars(rows: list[RegularRow], key: RegularSort) -> list[RegularRow]:
     if key == "last":
         return sorted(by_call, key=lambda r: r.last_seen, reverse=True)
     return by_call
-
-
-class _Filterable(Protocol):
-    @property
-    def callsign(self) -> str: ...
-    @property
-    def name(self) -> str | None: ...
-    @property
-    def grid_text(self) -> str: ...
-
-
-
-def filter_rows[Row: _Filterable](rows: list[Row], text: str) -> list[Row]:
-    needle = text.strip().lower()
-    if not needle:
-        return list(rows)
-    return [
-        row for row in rows
-        if needle in " ".join((row.callsign, row.name or "", row.grid_text)).lower()
-    ]  # fmt: skip
 
 
 class LiveNet:

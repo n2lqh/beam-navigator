@@ -70,7 +70,7 @@ def test_windows_data_folder() -> None:
 
 @pytest.mark.parametrize(
     "text",
-    ["YOUR SECTOR IS UP", "Rotate to net control", "Find or point at", "Use for tonight",
+    ["YOUR SECTOR IS UP", "Rotate to net control", "Net control is pointing", "Use for tonight",
      "Save for this net", "Set net control…", "Add grid…"],
 )  # fmt: skip
 def test_live_net_labels(text: str) -> None:

@@ -15,7 +15,6 @@ from beam_navigator.live_net import (
     LiveNet,
     RegularRow,
     controller_line,
-    filter_rows,
     sort_regulars,
     sort_rows,
 )
@@ -162,9 +161,6 @@ def test_sort_and_filter(live: LiveNet, w2kv: int) -> None:
     known = [r.distance_km for r in by_distance if r.distance_km is not None]
     assert known == sorted(known)
     assert all(r.distance_km is None for r in by_distance[len(known):])
-    assert [r.callsign for r in filter_rows(rows, "k3wgr")] == ["K3WGR"]
-    assert [r.callsign for r in filter_rows(rows, "fn10XI")] == ["K3WGR"]
-    assert filter_rows(rows, "") == rows
 
 
 def test_nothing_sent_without_press(
@@ -261,11 +257,6 @@ def test_sort_regulars_each_key() -> None:  # acceptance 40
     assert [r.callsign for r in sort_regulars(rows, "grid")] == ["AA2B", "W2KV", "K1ABC"]
     assert [r.callsign for r in sort_regulars(rows, "direction")] == ["AA2B", "W2KV", "K1ABC"]
     assert [r.callsign for r in sort_regulars(rows, "last")] == ["K1ABC", "AA2B", "W2KV"]
-
-
-def test_filter_rows_takes_regulars() -> None:
-    rows = [regular("W2KV", "FN20", 350.0, "2026-10-19"), regular("K1ABC", None, None, "x")]
-    assert [r.callsign for r in filter_rows(rows, "fn2")] == ["W2KV"]
 
 
 def test_regular_without_grid(conn: sqlite3.Connection, live: LiveNet) -> None:  # Focus 3

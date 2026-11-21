@@ -136,13 +136,12 @@ async def test_target_card_follows_picks(
     await user.should_see("No target yet — pick a station")  # this net has no net control
     user.find(marker="regular-W2KV").click()
     await user.should_see("from: Regulars")
-    user.find(marker="aim").type("FN20").trigger("keydown.enter")
+    user.find(marker="entry-callsign").type("FN20")
+    press_enter(user, "callsign")
     await user.should_see("from: Typed")
-    user.find(marker="entry-callsign").type("K9ZZZ")
+    entry(user, "callsign").set_value("K9ZZZ")
     user.find(marker="entry-grid").type("FN20")
-    await user.should_see("Aim to K9ZZZ")
-    user.find(marker="i-hear-aim").click()
-    await user.should_see("from: I hear")
+    await user.should_see("from: I hear")  # a located call is the Target by itself
     await user.should_see("(K9ZZZ)")
     assert sim.commands == []
 
@@ -156,10 +155,8 @@ async def test_only_the_target_row_is_highlighted(
     await user.should_see("from: Tonight list")
     [row] = user.find(marker=f"row-{first.id}").elements
     assert "bg-blue-1" in row.classes
-    user.find(marker="entry-callsign").type("K9ZZZ")  # the Aim box would filter row 1 out
+    user.find(marker="entry-callsign").type("K9ZZZ")
     user.find(marker="entry-grid").type("FN20")
-    await user.should_see("Aim to K9ZZZ")
-    user.find(marker="i-hear-aim").click()
     await user.should_see("from: I hear")
     [row] = user.find(marker=f"row-{first.id}").elements
     assert "bg-blue-1" not in row.classes
@@ -347,30 +344,32 @@ async def test_aim_enter_sends_nothing(
     user: User, desk: Desk, w2kv: int, sim: SimulationAdapter
 ) -> None:  # acceptance 37
     await open_net(user, desk, w2kv)
-    user.find(marker="aim").type("FN20").trigger("keydown.enter")
+    user.find(marker="entry-callsign").type("FN20")  # one box: a grid points, never logs
+    press_enter(user, "callsign")
     await user.should_see("Rotate VHF to 342")
     await user.should_see("FN20 — typed")
     assert sim.commands == []
+    assert NetRepository(desk.conn).checkins(w2kv)[-1].callsign != "FN20"
 
 
 async def test_aim_unknown_says_why(user: User, desk: Desk, w2kv: int) -> None:
     await open_net(user, desk, w2kv)
-    user.find(marker="aim").type("K3").trigger("keydown.enter")
+    user.find(marker="entry-callsign").type("K3")
+    press_enter(user, "callsign")
     await user.should_see("Not recognized")
 
 
-async def test_aim_filters_both_lists(
+async def test_typing_never_hides_the_lists(
     user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
-) -> None:  # acceptance 41
+) -> None:  # owner, 2026-11-21: Tonight showed only the last check-in while a call was typed
     tonight = tonight_after(conn, w2kv)
     regulars = [c.callsign for c in NetRepository(conn).checkins(w2kv)]
     NetRepository(conn).add_checkin(tonight, regulars[0])
     await open_net(user, desk, tonight)
+    user.find(marker="entry-callsign").type(regulars[1])
+    await user.should_see(marker=f"regular-{regulars[2]}")
     await user.should_see(marker=f"regular-{regulars[1]}")
-    user.find(marker="aim").type(regulars[1])
-    await user.should_see(marker=f"regular-{regulars[1]}")
-    await user.should_not_see(marker=f"regular-{regulars[2]}")
-    await user.should_not_see(regulars[0])
+    await user.should_see(regulars[0])
     assert sim.commands == []
 
 
@@ -463,15 +462,32 @@ async def test_heard_button_sends_nothing(
     assert sim.commands == []
 
 
-async def test_add_tonight_fills_i_hear(
-    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int
-) -> None:
+async def test_a_known_call_becomes_the_target_without_a_press(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:  # owner, 2026-11-21: any call entered queues up "Rotate to" it
     tonight = tonight_after(conn, w2kv)
     await open_net(user, desk, tonight)
-    user.find(marker="aim").type("W2KV").trigger("keydown.enter")
-    user.find(marker="add-tonight").click()
-    assert entry(user, "callsign").value == "W2KV"
-    assert NetRepository(conn).checkins(tonight) == []
+    entry(user, "callsign").set_value("W2KV")  # saved from the roster, with a grid
+    await user.should_see("(W2KV)")
+    await user.should_see("from: I hear")
+    assert NetRepository(conn).checkins(tonight) == []  # Enter still logs it
+    assert sim.commands == []
+
+
+async def test_a_called_station_lights_where_net_control_points(
+    user: User, desk: Desk, w2kv: int, sim: SimulationAdapter
+) -> None:  # owner, 2026-11-21: "Net control is pointing SW"
+    await open_net(user, desk, w2kv)
+    await user.should_see("Net control is pointing")
+    entry(user, "callsign").set_value("K4SO")  # FM18AP, south-west of W2KV's FN20ok
+    await user.should_see("Net control is pointing SW")
+    [lit] = user.find(marker="sector-SW").elements
+    [other] = user.find(marker="sector-S").elements
+    assert lit.props.get("outline") is not True and other.props.get("outline") is True
+    user.find(marker="sector-S").click()
+    await user.should_see("Net control is pointing S")
+    await user.should_see(SECTOR_UP)
+    assert sim.commands == []
 
 
 async def test_close_with_notes_then_next_session_shows_them(
@@ -513,11 +529,10 @@ async def test_aim_unresolved_clears_typed_target(
     user: User, desk: Desk, w2kv: int, sim: SimulationAdapter
 ) -> None:  # final review I1: never rotate to an earlier typed target
     await open_net(user, desk, w2kv)
-    user.find(marker="aim").type("FN20").trigger("keydown.enter")
+    user.find(marker="entry-callsign").type("FN20")
+    press_enter(user, "callsign")
     await user.should_see("Rotate VHF to 342")
-    [box] = user.find(marker="aim").elements
-    box.set_value("K9ZZZ")
-    user.find(marker="aim").trigger("keydown.enter")
+    entry(user, "callsign").set_value("K9ZZZ")  # no location anywhere
     await user.should_not_see("Rotate VHF to 342")  # wait for the redraw
     [rotate] = user.find(marker="rotate").elements
     assert not rotate.enabled
@@ -616,8 +631,24 @@ async def test_i_hear_fills_after_a_pause_without_enter(
 async def test_find_and_i_hear_sit_above_the_lists(user: User, desk: Desk, w2kv: int) -> None:
     # owner, 2026-11-18: with a long Tonight list both must stay on screen
     await open_net(user, desk, w2kv)
-    [aim] = user.find(marker="aim").elements
+    await user.should_not_see(marker="aim")  # one box (owner, 2026-11-21)
     [i_hear] = user.find(marker="entry-callsign").elements
     [tonight] = user.find(marker="tonight-sort").elements
     [regulars] = user.find(marker="regular-sort").elements
-    assert aim.id < i_hear.id < tonight.id < regulars.id  # drawn top to bottom
+    assert i_hear.id < tonight.id < regulars.id  # drawn top to bottom
+
+
+async def test_ctrl_enter_in_the_box_rotates_once_to_the_call(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:  # owner, 2026-11-21: type the call net control gives, Ctrl+Enter, done
+    tonight = tonight_after(conn, w2kv)
+    await open_net(user, desk, tonight)
+    entry(user, "callsign").set_value("W2KV")
+    await user.should_see("(W2KV)")
+    assert sim.commands == []  # typing never moves it (invariant 2)
+    user.find(marker="entry-callsign").trigger(
+        "keydown", {"code": "Enter", "shiftKey": False, "ctrlKey": True, "altKey": False}
+    )
+    await user.should_see("Simulated:")
+    assert len(sim.commands) == 1
+    assert NetRepository(conn).checkins(tonight) == []  # rotating logs nothing
