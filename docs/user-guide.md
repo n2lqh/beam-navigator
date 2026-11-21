@@ -84,7 +84,7 @@ To build the program and installer yourself from the project folder (with the ap
 ### Options
 
 - `--port 8090` runs on another port, for example to run a second copy.
-- `--data-dir <folder>` keeps the data somewhere else, for example a test copy.
+- `--data-dir <folder>` uses another data folder for this run, for example a test copy. It wins over the folder chosen in Settings → Data.
 - `--no-browser` starts without opening a browser tab.
 
 ### Where your data lives
@@ -95,7 +95,7 @@ Everything is in one database file, `beamnav.db`, in your user data folder:
 - macOS: `~/Library/Application Support/beam-navigator`
 - Linux and Raspberry Pi: `~/.local/share/beam-navigator`
 
-The Windows program and `beamnav-ui` use the same folder, so they see the same data. Your QRZ login is not in this folder (see QRZ lookups).
+The Windows program and `beamnav-ui` use the same folder, so they see the same data. Your QRZ login is not in this folder (see QRZ lookups). To keep the data in a folder shared with your other PCs, see **Sharing your data between PCs**.
 
 ## First run: the Welcome wizard
 
@@ -250,6 +250,12 @@ In Settings → Data:
 - **Back up** downloads everything (stations, nets, history, rotators and settings) as one file, named like `beamnav-backup-2026-10-29-1507.db`. Your QRZ login is not in it.
 - **Restore from a backup (.db)** checks the file first. If it isn't a Beam Navigator backup, is damaged, or comes from a newer version, it says so and nothing changes. Otherwise it asks you to confirm. Your current data is saved first in the `backups` folder inside your data folder, then the backup replaces it.
 - **After a restore, every rotator is in simulation.** Run Test connection and switch Live back on. Reload any other open Beam Navigator pages.
+
+### Sharing your data between PCs
+
+In Settings → Data → **Data folder**, type a folder every PC can reach, for example `\\SHACK\BeamNavigator`, and press **Use this folder**. If the folder is empty your data is copied there; if it already has Beam Navigator data (from your other PC), that data is used as it is and nothing is overwritten. Quit and start Beam Navigator again to switch. Do the same on the other PC. **Use this PC's own folder** goes back to the folder above.
+
+Only one PC can have the data open at a time: two at once could damage it. While one PC has it, the other shows **Beam Navigator's data is in use**, naming that PC and when it opened it. Quit Beam Navigator there first. If it isn't running there (left running, or it crashed), press **Take over**: the first PC stops using the data within ten seconds. Quit gives the data back. If the shared folder can't be reached when Beam Navigator starts, it says so and stops rather than quietly using another folder; delete `data-folder.txt` in this PC's own folder to go back to it.
 
 ## About and licence
 

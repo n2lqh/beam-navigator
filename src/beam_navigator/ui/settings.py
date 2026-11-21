@@ -5,6 +5,7 @@ and reads; Test move runs on a throwaway simulator.
 """
 
 from collections.abc import Callable
+from pathlib import Path
 from urllib.parse import quote
 
 from nicegui import events, run, ui
@@ -14,6 +15,7 @@ from beam_navigator.backup import BackupError, checked_backup
 from beam_navigator.core.keymap import ACTIONS, Chord, label
 from beam_navigator.core.models import LatLon, OperatorProfile, RotatorProfile
 from beam_navigator.core.targets import AliasTarget, TargetError
+from beam_navigator.data_folder import DB_FILE, choose, move_data
 from beam_navigator.desk import QRZ_AUTO, Desk
 from beam_navigator.qrz_client import NON_SUBSCRIBER, QrzClient, QrzError
 from beam_navigator.qrz_login import clear_login, save_login, saved_username
@@ -96,7 +98,11 @@ def _number(text: str | None, what: str) -> float | None:
 
 
 def settings_page(
-    desk: Desk, qrz: QrzClient | None = None, restored: str | None = None, tab: str | None = None
+    desk: Desk,
+    qrz: QrzClient | None = None,
+    restored: str | None = None,
+    tab: str | None = None,
+    home: Path | None = None,
 ) -> None:
     """restored: the safety copy's name, after a restore redrew this page (decision 34).
     tab: the tab to open by its label, e.g. from the Welcome page (decision 35)."""
@@ -130,6 +136,8 @@ def settings_page(
                 _keys_panel(desk)
             with ui.tab_panel(data_tab):
                 _data_panel(desk)
+                if home is not None:
+                    _data_folder_panel(desk, home)
             with ui.tab_panel(about_tab):
                 _about_panel()
 
@@ -167,6 +175,54 @@ def _restored_notice(kept_name: str) -> None:
         " Navigator pages.",
         type="positive", multi_line=True, timeout=0, close_button=True,
     )  # fmt: skip
+
+
+def _data_folder_panel(desk: Desk, home: Path) -> None:
+    """A folder shared with the owner's other PCs (owner, 2026-11-21). Used from the next
+    start; one PC at a time, guarded by a lock in the folder."""
+    ui.separator()
+    ui.label("Data folder").classes("text-lg")
+    current = desk.data_dir()
+    ui.label(f"Now: {current}" if current else "Now: in memory (tests)").mark("data-folder-now")
+    ui.label(
+        "To share your data with another PC, choose a folder both can reach, for example"
+        r" \\SHACK\BeamNavigator. Only one PC can have it open at a time; a second PC is"
+        " told which one has it and can take over."
+    ).classes("text-caption")
+    folder = ui.input("Shared folder").classes("w-full").mark("data-folder")
+    result = ui.label("").mark("data-folder-result")
+
+    def use() -> None:
+        text = (folder.value or "").strip()
+        if not text:
+            ui.notify("Type the folder to use.", type="warning")
+            return
+        target = Path(text)
+        try:
+            how = move_data(desk.conn, target, DB_FILE)
+            choose(home, target)
+        except (ValueError, OSError) as exc:
+            _error(exc)
+            return
+        first = (
+            "Copied your data there." if how == "copied"
+            else "That folder already has Beam Navigator data; it will be used as it is,"
+            " and this PC's current data stays where it is."
+        )  # fmt: skip
+        result.set_text(f"{first} Quit and start Beam Navigator again to use it.")
+
+    def use_home() -> None:
+        choose(home, home)
+        result.set_text(
+            "Back to this PC's own folder from the next start. Quit and start Beam Navigator"
+            " again to use it."
+        )
+
+    with ui.row():
+        ui.button("Use this folder", on_click=use).mark("data-folder-use")
+        ui.button("Use this PC's own folder", on_click=use_home).props("flat").mark(
+            "data-folder-home"
+        )
 
 
 def _data_panel(desk: Desk) -> None:
