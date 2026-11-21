@@ -195,3 +195,14 @@ def test_qrz_missing_respects_the_switch(desk: Desk) -> None:
     desk.stations.add_from_roster("K1BBB", None, "FN20aa", None)
     desk.settings.set("qrz_auto", "off")
     assert desk.qrz_missing(["K1BBB"]) == []
+
+
+def test_qrz_auto_when_a_roster_left_no_name(desk: Desk) -> None:
+    # The shack's WA3EBS, 2026-11-20: grid FM29 and no name from a roster; QRZ never asked
+    desk.stations.save(Station("WA3EBS", None, "FM29", None, None, "roster", ""))
+    assert desk.qrz_auto("WA3EBS") is True
+
+
+def test_qrz_auto_when_the_saved_grid_is_only_four_characters(desk: Desk) -> None:
+    desk.stations.save(Station("AA7BQ", "FRED", "DM32", None, None, "saved", ""))
+    assert desk.qrz_auto("AA7BQ") is True

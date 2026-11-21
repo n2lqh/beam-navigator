@@ -90,6 +90,7 @@ Each item lists what it is, why it matters, and what has to exist first.
 - **Published rosters:** controllers publish each session after the net.
 - **Aggregated path reports (opt-in):** for example, "stations near FM29 hear K3WGR on 2 m in 70% of sessions." Individual heard states and exact coordinates never upload by default.
 - **Live shared session** (NetLogger-style): one authoritative session per net and date, controller writes, participants read. Do not scrape or claim integration with NetLogger; compatibility means text/CSV import and export only.
+- **Web check-in page and live net map** (owner request 2026-10-30, after seeing the NJ2US Live Net Map, https://map.nj2us.org/map): stations check in from a browser into a queue; the controller accepts each one into the log, the same review the roster import uses, so a web check-in never replaces a saved grid on its own. Accepted check-ins appear in a recent check-ins list and as pins on a live map that everyone following the net can watch. Builds on the live shared session. The web page and map tiles need the network, so the desktop app keeps the offline azimuthal plot (B4.9) as its map. Check-ins and plotting never move a rotator. Take the idea, not the NJ2US page's code or design.
 
 **Reporting**
 - Per net: attendance trends, new versus returning stations, activity by band and month.

@@ -240,12 +240,13 @@ class Desk:
         )
 
     def qrz_auto(self, callsign: str) -> bool:
-        """Look up on QRZ without a press: on unless switched off, and only when nothing
-        useful is stored for the call (owner, 2026-10-29)."""
+        """Look up on QRZ without a press: on unless switched off, and only when the stored
+        record is missing or thin: no name, or no grid finer than a 4-character square
+        (owner, 2026-10-29; 2026-11-21, after a roster's WA3EBS FM29 was never looked up)."""
         if self.settings.get(QRZ_AUTO) == "off" or self.qrz.get(callsign) is not None:
             return False
         record = self.stations.get(normalize_callsign(callsign))
-        return record is None or not record.grid
+        return record is None or not record.name or len((record.grid or "").strip()) < 6
 
     def qrz_missing(self, callsigns: list[str]) -> list[str]:
         """Of these calls, the ones QRZ could complete: no name or no grid stored, and no
