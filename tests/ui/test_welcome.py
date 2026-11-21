@@ -185,3 +185,14 @@ async def test_prefill_says_which_station_and_offers_new(user: User, desk: Desk)
     await fill_station(user, "FN31", "K2NEW")
     await eventually(lambda: step(user) == "Example nets")
     assert sorted(p.home_grid for p in desk.profiles.list()) == ["FN20", "FN31"]
+
+
+async def test_time_zone_starts_as_this_computers(user: User, desk: Desk) -> None:
+    # owner, 2026-11-21: the browser on this PC names its zone; UTC was a trap
+    import re
+
+    user.javascript_rules[re.compile(r".*resolvedOptions\(\)\.timeZone.*")] = (
+        lambda _: "America/Chicago"
+    )
+    await open_app(user, desk)
+    await eventually(lambda: element(user, "welcome-timezone").value == "America/Chicago")

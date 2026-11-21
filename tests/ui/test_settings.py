@@ -516,3 +516,14 @@ async def test_about_shows_copyright_licence_and_source(user: User, desk: Desk) 
     story = user.find(marker="about-story").elements.pop()
     assert isinstance(story, ui.link)
     assert story.props["href"] == "https://n2lqh.com/projects/beam-navigator/"
+
+
+async def test_new_profile_time_zone_is_this_computers(user: User, desk: Desk) -> None:
+    # owner, 2026-11-21: never UTC unless typed
+    import re
+
+    user.javascript_rules[re.compile(r".*resolvedOptions\(\)\.timeZone.*")] = (
+        lambda _: "America/Chicago"
+    )
+    await open_tab(user, desk, "Station")
+    await eventually(lambda: element(user, "profile-timezone").value == "America/Chicago")

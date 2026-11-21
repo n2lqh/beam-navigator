@@ -85,7 +85,7 @@ class WelcomeDraft:
     callsign: str = ""
     grid: str = ""
     units: Literal["km", "mi"] = "km"
-    timezone: str = "UTC"
+    timezone: str = ""  # blank: this computer's zone (owner, 2026-11-21)
     profile_id: int | None = None  # set when the entries came from a saved profile
 
 
@@ -100,7 +100,7 @@ def _parse_draft(raw: str | None) -> WelcomeDraft | None:
     if not isinstance(data, dict):
         return None
     texts = [data.get(key, default) for key, default in
-             (("callsign", ""), ("grid", ""), ("timezone", "UTC"))]  # fmt: skip
+             (("callsign", ""), ("grid", ""), ("timezone", ""))]  # fmt: skip
     units = data.get("units", "km")
     profile_id = data.get("profile_id")
     if not all(isinstance(text, str) for text in texts) or units not in ("km", "mi"):
@@ -525,9 +525,10 @@ class Desk:
     def save_welcome_station(self, draft: WelcomeDraft) -> OperatorProfile:
         """Saves and activates the station; a refused entry stays in the draft."""
         self.keep_welcome_draft(draft)
-        zone = draft.timezone.strip() or "UTC"
+        zone = draft.timezone.strip()  # blank: this computer's zone, never UTC by default
         try:
-            ZoneInfo(zone)
+            if zone:
+                ZoneInfo(zone)
         except (ZoneInfoNotFoundError, ValueError) as exc:
             raise ValueError(
                 f"{zone!r} is not a time zone. Use a name such as America/New_York, or UTC."

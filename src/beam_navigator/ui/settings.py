@@ -19,6 +19,7 @@ from beam_navigator.qrz_client import NON_SUBSCRIBER, QrzClient, QrzError
 from beam_navigator.qrz_login import clear_login, save_login, saved_username
 from beam_navigator.rotators.travel import PRESETS
 from beam_navigator.store.repositories import RotatorNotTested
+from beam_navigator.ui.browser_zone import fill_when_blank
 
 LIVE_LABEL = "Live: Rotate turns the real antenna"
 SIMULATION_LABEL = "Simulation"
@@ -440,7 +441,7 @@ def _station_panel(desk: Desk) -> None:
                     home_grid=(grid.value or "").strip(),
                     latlon=latlon,
                     units=units.value,
-                    timezone=(timezone.value or "").strip() or "UTC",
+                    timezone=(timezone.value or "").strip(),  # blank: this computer's
                     home_region=(region.value or "").strip() or None,
                     is_active=False,
                 )
@@ -462,7 +463,10 @@ def _station_panel(desk: Desk) -> None:
         lat = ui.input("Exact latitude (optional)").mark("profile-lat")
         lon = ui.input("Exact longitude (optional)").mark("profile-lon")
         units = ui.select(["km", "mi"], value="km", label="Units").mark("profile-units")
-        timezone = ui.input("Time zone", placeholder="UTC").mark("profile-timezone")
+        timezone = ui.input("Time zone", placeholder="This computer's").mark(
+            "profile-timezone"
+        )
+        fill_when_blank(timezone)
     ui.button("Save station", on_click=save)
 
 

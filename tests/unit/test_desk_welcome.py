@@ -89,7 +89,7 @@ def test_corrupt_draft_falls_back(desk: Desk, raw: str) -> None:
     desk.settings.set(WELCOME_DRAFT, raw)
     assert desk.welcome_draft() == WelcomeDraft()
     profile = saved(desk, "Portable", "FN20")
-    assert desk.welcome_draft() == WelcomeDraft(grid="FN20", profile_id=profile.id)
+    assert desk.welcome_draft() == WelcomeDraft(grid="FN20", timezone="UTC", profile_id=profile.id)
 
 
 def test_use_station(desk: Desk) -> None:
@@ -131,3 +131,9 @@ def test_name_taken_is_a_clear_error(desk: Desk) -> None:
         desk.save_welcome_station(WelcomeDraft(grid="FN31"))
     assert len(desk.profiles.list()) == 1
     assert desk.welcome_draft().grid == "FN31"
+
+
+def test_blank_zone_means_this_computer_not_utc(desk: Desk) -> None:
+    # owner, 2026-11-21: a profile left on UTC put Friday's nets at the end of the list
+    assert WelcomeDraft().timezone == ""
+    assert desk.save_welcome_station(WelcomeDraft(grid="FN20")).timezone == ""
