@@ -575,3 +575,38 @@ async def test_new_profile_starts_blank_with_this_computers_zone(
     user.find("Save station").click()
     await user.should_see("Portable · FN20ok")
     assert len(ProfileRepository(conn).list()) == 2
+
+
+def rough_station(desk: Desk, call: str, grid: str | None) -> None:
+    desk.stations.save(Station(call, "NAME", grid, "TOWN", None, "saved", ""))
+
+
+async def test_exact_grids_button_asks_qrz_and_updates_the_station(
+    user: User, desk: Desk, qrz_examples: list[bytes], memory_keyring: Any
+) -> None:  # owner, 2026-11-24: "fix the existing records ... a 6 digit grid from QRZ"
+    from beam_navigator.qrz_login import save_login
+
+    save_login("xx1xxx", "pw-123")
+    rough_station(desk, "AA7BQ", "DM32")
+    await open_qrz_tab(user, desk, [qrz_examples[0], qrz_examples[1]])  # login, AA7BQ
+    user.find("Get exact grids from QRZ (1 station)").click()
+    await user.should_see("Exact grid for 1 station from QRZ.")
+    saved = desk.stations.get("AA7BQ")
+    assert saved is not None and saved.grid == "DM32af"
+    await user.should_see("Get exact grids from QRZ (0 stations)")
+
+
+async def test_exact_grids_uses_saved_qrz_answers_and_names_other_squares(
+    user: User, desk: Desk, qrz_examples: list[bytes]
+) -> None:
+    from beam_navigator.core.qrz import parse_response
+
+    record = parse_response(qrz_examples[1]).record
+    assert record is not None
+    desk.qrz_store(record, None)  # answered before: no network needed
+    rough_station(desk, "AA7BQ", "FN20")
+    await open_qrz_tab(user, desk, [])
+    user.find("Get exact grids from QRZ (1 station)").click()
+    await user.should_see("QRZ puts these in another square; check them: AA7BQ (DM32af)")
+    saved = desk.stations.get("AA7BQ")
+    assert saved is not None and saved.grid == "FN20"

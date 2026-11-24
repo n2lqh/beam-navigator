@@ -206,7 +206,9 @@ On Windows, the first time Beam Navigator listens for PstRotator's replies, Wind
 
 QRZ lookups are optional; everything else works without them. They need a QRZ.com login with an **XML Data subscription**. Enter your username and password in Settings → QRZ and press **Save**. Your login is kept in your computer's credential store (Windows Credential Manager, macOS Keychain or the Linux keyring), never in Beam Navigator's files or backups. **Test login** checks it; **Clear** removes it.
 
-With **Look up calls automatically when nothing is saved for them** on, a callsign with no saved grid is looked up when you enter it. QRZ only fills blanks: it never overwrites a grid from a roster or one you typed. On screen, QRZ details are marked as from QRZ; once you save the station or log the check-in, they are kept like your other station details.
+With **Look up calls automatically when nothing is saved for them** on, a callsign with no saved grid is looked up when you enter it. QRZ only fills blanks: it never overwrites a grid from a roster or one you typed. On screen, QRZ details are marked as from QRZ; once you save the station or log the check-in, they are kept like your other station details. One exception: a 4-character grid such as `FM29` covers a square about 100 miles wide, so when QRZ has an exact grid inside that same square, QRZ's grid replaces it.
+
+**Get exact grids from QRZ** (Settings → QRZ) does the same for every saved station that has only a 4-character grid or none. The button shows how many there are. It uses QRZ answers already saved and asks QRZ only for the rest, one call at a time, and only when you press it. A grid changes only when QRZ's grid lies inside the saved square; stations QRZ puts in a different square are listed for you to check, and nothing about them changes.
 
 ## Keyboard shortcuts
 

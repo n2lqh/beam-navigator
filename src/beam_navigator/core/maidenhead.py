@@ -45,3 +45,17 @@ def is_grid(text: str) -> bool:
     except GridError:
         return False
     return True
+
+
+def finer_grid(current: str | None, offered: str | None) -> str | None:
+    """The offered grid when it improves on the current one: the current one is blank, or
+    a 4-character square (~100 miles wide) that the longer offered grid lies inside.
+    None keeps the current grid (owner, 2026-11-24)."""
+    have, new = (current or "").strip(), (offered or "").strip()
+    if not new:
+        return None
+    if not have:
+        return new
+    if len(have) == 4 and len(new) > 4 and new[:4].upper() == have.upper():
+        return new
+    return None

@@ -18,7 +18,7 @@ from beam_navigator.core.callsign import normalize_callsign
 from beam_navigator.core.geometry import compass_name, is_home, short_path
 from beam_navigator.core.keymap import Chord, Keymap
 from beam_navigator.core.lookup import lookup
-from beam_navigator.core.maidenhead import GridError, grid_center, is_grid
+from beam_navigator.core.maidenhead import GridError, finer_grid, grid_center, is_grid
 from beam_navigator.core.models import (
     CommandRecord,
     LatLon,
@@ -247,6 +247,27 @@ class Desk:
             return False
         record = self.stations.get(normalize_callsign(callsign))
         return record is None or not record.name or len((record.grid or "").strip()) < 6
+
+    def rough_grid_calls(self) -> list[str]:
+        """Saved stations QRZ might give an exact grid for (owner, 2026-11-24)."""
+        return self.stations.rough_grid_calls()
+
+    def refine_grid(self, record: QrzRecord) -> Literal["updated", "elsewhere", "unchanged"]:
+        """Puts QRZ's grid on the saved station when it fills a missing grid or narrows a
+        4-character square it lies inside; only a station-entered or address position
+        counts. "elsewhere": QRZ puts the station in another square, left for the operator."""
+        saved = self.stations.get(record.call)
+        offered = record.grid if record.precision in ("station", "address") else None
+        if saved is None or not offered:
+            return "unchanged"
+        better = finer_grid(saved.grid, offered)
+        if better is not None:
+            self.stations.set_grid(saved.callsign, better)
+            return "updated"
+        have = (saved.grid or "").strip()
+        if len(have) == 4 and offered[:4].upper() != have.upper():
+            return "elsewhere"
+        return "unchanged"
 
     def qrz_missing(self, callsigns: list[str]) -> list[str]:
         """Of these calls, the ones QRZ could complete: no name or no grid stored, and no

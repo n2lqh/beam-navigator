@@ -206,3 +206,55 @@ def test_qrz_auto_when_a_roster_left_no_name(desk: Desk) -> None:
 def test_qrz_auto_when_the_saved_grid_is_only_four_characters(desk: Desk) -> None:
     desk.stations.save(Station("AA7BQ", "FRED", "DM32", None, None, "saved", ""))
     assert desk.qrz_auto("AA7BQ") is True
+
+
+# Exact grids for saved stations (owner, 2026-11-24: "fix the existing records") ----------
+
+
+def station(call: str, grid: str | None, latlon: object = None) -> Station:
+    return Station(call, "NAME", grid, "TOWN", latlon, "saved", "")  # type: ignore[arg-type]
+
+
+def test_rough_grid_calls_lists_short_or_missing_grids(desk: Desk) -> None:
+    from beam_navigator.core.models import LatLon
+
+    desk.stations.save(station("AA7BQ", "DM32"))
+    desk.stations.save(station("K1AAA", "FN20ok"))
+    desk.stations.save(station("K2BBB", None))
+    desk.stations.save(station("K3CCC", "FN20", LatLon(40.0, -75.0)))  # exact position kept
+    assert desk.rough_grid_calls() == ["AA7BQ", "K2BBB"]
+
+
+def test_refine_grid_replaces_a_square_with_the_finer_grid_inside_it(
+    desk: Desk, aa7bq: QrzRecord
+) -> None:
+    desk.stations.save(station("AA7BQ", "dm32"))
+    assert desk.refine_grid(aa7bq) == "updated"
+    saved = desk.stations.get("AA7BQ")
+    assert saved is not None
+    assert (saved.grid, saved.name, saved.qth) == ("DM32af", "NAME", "TOWN")
+
+
+def test_refine_grid_fills_a_missing_grid(desk: Desk, aa7bq: QrzRecord) -> None:
+    desk.stations.save(station("AA7BQ", None))
+    assert desk.refine_grid(aa7bq) == "updated"
+    saved = desk.stations.get("AA7BQ")
+    assert saved is not None and saved.grid == "DM32af"
+
+
+def test_refine_grid_leaves_another_square_alone(desk: Desk, aa7bq: QrzRecord) -> None:
+    desk.stations.save(station("AA7BQ", "FN20"))
+    assert desk.refine_grid(aa7bq) == "elsewhere"
+    saved = desk.stations.get("AA7BQ")
+    assert saved is not None and saved.grid == "FN20"
+
+
+def test_refine_grid_never_uses_an_approximate_qrz_position(
+    desk: Desk, aa7bq: QrzRecord
+) -> None:
+    desk.stations.save(station("AA7BQ", "DM32"))
+    assert desk.refine_grid(replace(aa7bq, geoloc="zip")) == "unchanged"
+    assert desk.refine_grid(replace(aa7bq, grid=None)) == "unchanged"
+    assert desk.refine_grid(replace(aa7bq, call="K9NONE")) == "unchanged"  # no saved station
+    saved = desk.stations.get("AA7BQ")
+    assert saved is not None and saved.grid == "DM32"

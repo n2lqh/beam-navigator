@@ -17,7 +17,7 @@ from beam_navigator.core.models import LatLon, OperatorProfile, RotatorProfile
 from beam_navigator.core.targets import AliasTarget, TargetError
 from beam_navigator.data_folder import DB_FILE, choose, move_data
 from beam_navigator.desk import QRZ_AUTO, Desk
-from beam_navigator.qrz_client import NON_SUBSCRIBER, QrzClient, QrzError
+from beam_navigator.qrz_client import NON_SUBSCRIBER, NOT_FOUND, QrzClient, QrzError
 from beam_navigator.qrz_login import clear_login, save_login, saved_username
 from beam_navigator.rotators.travel import PRESETS
 from beam_navigator.store.repositories import RotatorNotTested
@@ -448,6 +448,59 @@ def _qrz_panel(desk: Desk, qrz: QrzClient) -> None:
         value=desk.settings.get(QRZ_AUTO) != "off",
         on_change=lambda e: desk.settings.set(QRZ_AUTO, "on" if e.value else "off"),
     ).mark("qrz-auto")
+    _exact_grids(desk, qrz)
+
+
+def _exact_grids(desk: Desk, qrz: QrzClient) -> None:
+    """Exact grids for saved stations with a rough or missing one, only on this press
+    (owner, 2026-11-24). A saved QRZ answer is used first; one lookup at a time."""
+    result = ui.label("").classes("whitespace-pre-line")
+
+    async def run_pass() -> None:
+        updated: list[str] = []
+        elsewhere: list[str] = []
+        problem = ""
+        for call in desk.rough_grid_calls():
+            cached = desk.qrz.get(call)
+            if cached is not None:
+                record = cached[0]
+            else:
+                try:
+                    record, notice = await run.io_bound(qrz.lookup, call)
+                except QrzError as exc:
+                    if str(exc).startswith(NOT_FOUND):
+                        continue
+                    problem = str(exc)  # login, network or subscription: stop here
+                    break
+                desk.qrz_store(record, notice)
+            outcome = desk.refine_grid(record)
+            if outcome == "updated":
+                updated.append(call)
+            elif outcome == "elsewhere":
+                elsewhere.append(f"{call} ({record.grid})")
+        plural = "station" if len(updated) == 1 else "stations"
+        lines = [f"Exact grid for {len(updated)} {plural} from QRZ."]
+        if elsewhere:
+            lines.append(f"QRZ puts these in another square; check them: {', '.join(elsewhere)}")
+        if problem:
+            lines.append(f"Stopped: {problem}")
+        result.set_text("\n".join(lines))
+        button.refresh()
+
+    @ui.refreshable
+    def button() -> None:
+        count = len(desk.rough_grid_calls())
+        plural = "station" if count == 1 else "stations"
+        ui.button(f"Get exact grids from QRZ ({count} {plural})", on_click=run_pass).props(
+            "flat"
+        ).mark("qrz-exact-grids")
+
+    ui.label(
+        "Saved stations with only a 4-character grid, or none, can get an exact grid from"
+        " QRZ. A grid changes only when QRZ's lies inside the saved square."
+    ).classes("text-caption")
+    button()
+    result.move(target_index=-1)
 
 
 def _station_panel(desk: Desk) -> None:

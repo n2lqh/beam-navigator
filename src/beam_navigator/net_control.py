@@ -10,7 +10,7 @@ from datetime import UTC, date, datetime, tzinfo
 
 from beam_navigator.core.callsign import base_callsign, is_callsign, normalize_callsign
 from beam_navigator.core.geometry import compass_name, short_path
-from beam_navigator.core.maidenhead import grid_center, is_grid
+from beam_navigator.core.maidenhead import finer_grid, grid_center, is_grid
 from beam_navigator.core.models import CheckIn, Station
 from beam_navigator.core.qrz import QrzRecord
 from beam_navigator.core.schedule import zone_for
@@ -269,10 +269,12 @@ class NetControl:
         """QRZ fills only blank fields (requirements 4.9). Its grid is used only when QRZ's
         position came from the station or its address, never a zip, state or country."""
         grid = record.grid if record.precision in ("station", "address") else None
+        # QRZ's finer grid inside a typed 4-character square replaces it (owner,
+        # 2026-11-24: KB2AYU's FM29 aimed 37 degrees off).
         return replace(
             entry,
             name=entry.name.strip() or record.name or "",
-            grid=entry.grid.strip() or grid or "",
+            grid=finer_grid(entry.grid, grid) or entry.grid.strip(),
             qth=entry.qth.strip() or record.qth or "",
         )
 

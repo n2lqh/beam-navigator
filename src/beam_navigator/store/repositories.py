@@ -228,6 +228,22 @@ class StationRepository:
         with self._conn:
             return _insert_roster_station(self._conn, callsign, name, grid, qth)
 
+    def rough_grid_calls(self) -> list[str]:
+        """Stations with no exact position and a grid missing or shorter than 6 characters."""
+        rows = self._conn.execute(
+            "SELECT callsign FROM station WHERE (lat IS NULL OR lon IS NULL)"
+            " AND length(trim(coalesce(grid, ''))) < 6 ORDER BY callsign"
+        ).fetchall()
+        return [row["callsign"] for row in rows]
+
+    def set_grid(self, callsign: str, grid: str) -> None:
+        """Only the grid changes; name, QTH, notes and source stay as they are."""
+        with self._conn:
+            self._conn.execute(
+                "UPDATE station SET grid = ?, updated_at = ? WHERE callsign = ?",
+                (grid, _now(), normalize_callsign(callsign)),
+            )
+
     def callsigns_containing(self, fragment: str, limit: int = 200) -> list[str]:
         """Known callsigns containing the text, for partial-call matching (spec 4.5)."""
         rows = self._conn.execute(

@@ -231,6 +231,20 @@ def test_qrz_fill_only_blanks(control: NetControl, qrz_examples: list[bytes]) ->
     assert control.qrz_fill(typed, vague).grid == ""  # approximate: never a grid
 
 
+
+def test_qrz_grid_refines_a_square_it_falls_in(
+    control: NetControl, qrz_examples: list[bytes]
+) -> None:  # owner, 2026-11-24: KB2AYU's FM29 pointed 37 degrees off what QRZ gives
+    from beam_navigator.core.qrz import parse_response
+    from beam_navigator.net_control import Entry
+
+    record = parse_response(qrz_examples[1]).record  # DM32af
+    assert record is not None
+    assert control.qrz_fill(Entry("AA7BQ", grid="DM32"), record).grid == "DM32af"
+    assert control.qrz_fill(Entry("AA7BQ", grid=" dm32 "), record).grid == "DM32af"
+    assert control.qrz_fill(Entry("AA7BQ", grid="FN20"), record).grid == "FN20"  # elsewhere
+    assert control.qrz_fill(Entry("AA7BQ", grid="DM32ab"), record).grid == "DM32ab"  # fine
+
 def test_log_heard_marks_heard_and_saves_for_next_session(
     control: NetControl, conn: sqlite3.Connection, net_id: int, tonight: int
 ) -> None:  # acceptance 42

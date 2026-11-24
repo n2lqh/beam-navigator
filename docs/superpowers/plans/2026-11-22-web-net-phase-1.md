@@ -268,7 +268,7 @@
 
 **Files:**
 - Create: `web/src/Owner.php`, `web/public/install.php`, `web/README.md`, `web/tests/OwnerInstallTest.php`
-- Modify: `docs/requirements.md` (section 7: new subsection "Web net" with tests 48–59 below), `docs/decisions.md` (decision 49), `docs/user-guide.md` (a "Web net" section), `docs/backlog.md` (mark B5's web check-in entry as phase 1 built, phases 2–3 planned)
+- Modify: `docs/requirements.md` (section 7: new subsection "Web net" with tests 48–59 below), `docs/decisions.md` (the next free decision number), `docs/user-guide.md` (a "Web net" section), `docs/backlog.md` (mark B5's web check-in entry as phase 1 built, phases 2–3 planned)
 
 **Interfaces — Produces:**
 - `Owner::signIn(string $password, string $hash): bool` uses `password_verify`, with the PHP session marked as owner. Five failed tries from one IP in 15 minutes lock sign-in for 15 minutes (counted in `changes` with action `owner_fail`).
@@ -307,4 +307,4 @@
   - **58.** Pins sit at the centre of the check-in's grid square; a check-in without a grid has no pin.
   - **59.** Manage nets lists never-used and least recently used nets first, flags likely duplicates, archives without losing history, and deletes only for the signed-in site owner after a confirmation. The database and owner passwords are never in the repository, and the install page refuses to run twice.
 - [ ] **Step 4:** Run the whole PHP suite, then `uv run pytest -q` and `uv run ruff check .`. Expected: all pass.
-- [ ] **Step 5:** Commit `feat(web): site owner, install page; docs and acceptance tests 48–59 (decision 49)`.
+- [ ] **Step 5:** Commit `feat(web): site owner, install page; docs and acceptance tests 48–59 (decision N)`.
