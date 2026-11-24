@@ -142,7 +142,7 @@ After a net, the controller usually publishes the roll call. Choose **Import**, 
 
 The review table shows each station with its bearing and distance **from you**. A bearing printed in the roster is shown as **Published** for reference only. A station the roster gives no grid for is filled in from your saved records, then from QRZ (when automatic QRZ lookup is on, one call at a time), and the row says **from saved record** or **from QRZ**; such a grid goes with this session but is never saved as if the roster had said it. You can fix names and grids, leave rows out and pick the net controller. Anything Beam Navigator can't read is kept as an "Unparsed text" row, never thrown away. Press **Save**.
 
-The stations and grids are saved for next time (a roster never overwrites a station you saved yourself), and the original text is kept with the session. If a station's grid came from an earlier roster and this roster gives a different one, the row shows **Replace earlier roster grid …**: tick it to use the new grid, or leave it to keep the old one. Importing the same text again for the same net and date asks whether to **Replace** it or **Keep both**.
+The stations and grids are saved for next time (a roster never overwrites a station you saved yourself), and the original text is kept with the session. If a station's grid came from an earlier roster and this roster gives a different one, the row shows **Replace earlier roster grid …**: tick it to use the new grid, or leave it to keep the old one. Importing again for a net and date that already has an imported list asks whether to **Replace** it or **Cancel**: a net has one session per night.
 
 ## Nets and history
 

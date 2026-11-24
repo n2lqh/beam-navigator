@@ -147,10 +147,10 @@ def test_duplicate_detected_then_replace_or_refuse(
     review: RosterReview, conn: sqlite3.Connection, net_id: int
 ) -> None:  # acceptance 13
     text = fixture("w2kv_144mhz_2026-10-26.txt")
-    assert review.duplicate_of(net_id, "2026-10-26", review.parse(text)) is None
+    assert review.session_for_night(net_id, "2026-10-26") is None
     first = review.save(net_id, "2026-10-26", review.parse(text))
     again = review.parse(text)
-    assert review.duplicate_of(net_id, "2026-10-26", again) == first.id
+    assert review.session_for_night(net_id, "2026-10-26") == first
     review.save(net_id, "2026-10-26", again, replace_session_id=first.id)
     assert len(NetRepository(conn).sessions(net_id)) == 1
     with pytest.raises(ValueError, match="already has a session"):  # one per night

@@ -90,17 +90,37 @@ async def test_import_w2kv(
     assert len(NetRepository(conn).sessions(net_id)) == 1
 
 
-async def test_reimport_asks_replace_or_keep(
+async def test_reimport_asks_replace_or_cancel(
     user: User, desk: Desk, net_id: int, conn: sqlite3.Connection
 ) -> None:  # acceptance 13
     await paste_and_parse(user, desk, net_id)
     user.find(marker="save").click()
     await user.should_see("Saved 17 check-ins")
     user.find(marker="save").click()
-    await user.should_see("Replace")
-    user.find("Replace").click()
+    await user.should_see("for this night is already imported")
+    await user.should_see("Cancel")
+    await user.should_not_see("Keep both")
+    user.find(marker="replace-confirm").click()
     await user.should_see("Saved 17 check-ins")
     assert len(NetRepository(conn).sessions(net_id)) == 1
+
+
+async def test_reimport_of_different_text_also_asks_replace(
+    user: User, desk: Desk, net_id: int, conn: sqlite3.Connection
+) -> None:  # one session per net per night (owner, 2026-11-24)
+    await paste_and_parse(user, desk, net_id)
+    user.find(marker="save").click()
+    await user.should_see("Saved 17 check-ins")
+    pick(user, "roster-text", DMR)
+    user.find(marker="parse").click()
+    await user.should_not_see(marker="row-grid-16")  # the 11-row DMR list has replaced W2KV's 17
+    user.find(marker="save").click()
+    await user.should_see("for this night is already imported")
+    user.find(marker="replace-confirm").click()
+    await user.should_see("Open live net")  # cleared by Parse, back only after this save
+    sessions = NetRepository(conn).sessions(net_id)
+    assert len(sessions) == 1
+    assert sessions[0][0].raw_text == DMR
 
 
 async def test_invalid_grid_edit_blocks_save(

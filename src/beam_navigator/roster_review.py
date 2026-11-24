@@ -166,8 +166,9 @@ class RosterReview:
         for row in review.rows:
             row.is_controller = row.index == index and row.callsign is not None
 
-    def duplicate_of(self, net_id: int, date: str, review: Review) -> int | None:
-        return self._nets.find_identical_import(net_id, date, review.raw_text)
+    def session_for_night(self, net_id: int, date: str) -> Session | None:
+        """The net's one session on that date, if any (owner, 2026-11-24)."""
+        return self._nets.session_on(net_id, date)
 
     def save(
         self, net_id: int, date: str, review: Review, replace_session_id: int | None = None

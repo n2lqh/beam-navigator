@@ -98,7 +98,7 @@ def import_page(
         if filled and state["review"] is current:
             table.refresh()
 
-    def save(replace_session_id: int | None = None, keep_both: bool = False) -> None:
+    def save(replace_session_id: int | None = None) -> None:
         current = state["review"]
         if current is None:
             ui.notify("Parse the roster first.", type="warning")
@@ -108,10 +108,10 @@ def import_page(
             return
         when = (date_input.value or "").strip()
         try:
-            if replace_session_id is None and not keep_both:
-                existing = review.duplicate_of(net_select.value, when, current)
-                if existing is not None:
-                    ask_replace(existing)
+            if replace_session_id is None:
+                existing = review.session_for_night(net_select.value, when)
+                if existing is not None and existing.status == "imported":
+                    ask_replace(existing.id)
                     return
             session = review.save(net_select.value, when, current, replace_session_id)
         except ValueError as exc:
@@ -129,15 +129,11 @@ def import_page(
             dialog.close()
             save(replace_session_id=existing)
 
-        def keep_both() -> None:
-            dialog.close()
-            save(keep_both=True)
-
+        # One session per net per night (owner, 2026-11-24): Replace or Cancel, no Keep both.
         with ui.dialog() as dialog, ui.card():
-            ui.label("This exact roster was already imported for this net and date.")
+            ui.label("Net control's list for this night is already imported.")
             with ui.row():
-                ui.button("Replace", on_click=replace)
-                ui.button("Keep both", on_click=keep_both)
+                ui.button("Replace", on_click=replace).mark("replace-confirm")
                 ui.button("Cancel", on_click=dialog.close).props("flat")
         dialog.open()
 
