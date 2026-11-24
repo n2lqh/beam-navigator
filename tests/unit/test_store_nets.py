@@ -64,7 +64,7 @@ def test_identical_reimport_is_detected(conn: sqlite3.Connection) -> None:  # ac
     assert nets.find_identical_import(net_id, "2026-10-26", W2KV_TEXT) is None
 
 
-def test_replace_or_keep_both(conn: sqlite3.Connection) -> None:  # acceptance 13
+def test_replace_or_refuse_a_second_session(conn: sqlite3.Connection) -> None:  # acceptance 13
     nets = NetRepository(conn)
     net_id = make_net(nets, "Pack Rats 6 m")
     first = nets.import_roster(net_id, "2026-10-26", N3RG_TEXT, parse_roster(N3RG_TEXT))
@@ -73,8 +73,10 @@ def test_replace_or_keep_both(conn: sqlite3.Connection) -> None:  # acceptance 1
     )
     assert count(conn, "session") == 1
     assert count(conn, "checkin") == 22
-    nets.import_roster(net_id, "2026-10-26", N3RG_TEXT, parse_roster(N3RG_TEXT))
-    assert count(conn, "session") == 2
+    # One session per net per night (owner, 2026-11-24): no Keep both.
+    with pytest.raises(ValueError, match="already has a session on 2026-10-26"):
+        nets.import_roster(net_id, "2026-10-26", N3RG_TEXT, parse_roster(N3RG_TEXT))
+    assert count(conn, "session") == 1
 
 
 def test_cross_fixture_history(conn: sqlite3.Connection) -> None:  # spec 7 cross-fixture

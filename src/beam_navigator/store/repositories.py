@@ -452,6 +452,8 @@ class NetRepository:
         replace a grid learned from an earlier roster (decision 40); a saved record is
         never changed."""
         _check_date(date)
+        if replace_session_id is None and self.session_on(net_id, date) is not None:
+            raise ValueError(f"This net already has a session on {date}.")
         chosen: RosterRow | None = (
             next((row for row in result.rows if row.is_controller), None)
             if controller == "from rows"
@@ -540,8 +542,21 @@ class NetRepository:
 
     # Live sessions ----------------------------------------------------------------------
 
+    def session_on(self, net_id: int, date: str) -> Session | None:
+        """The net's session on that date, of any status: a night has one session (owner,
+        2026-11-24). Older data may hold more; the newest is the one used."""
+        row = self._conn.execute(
+            "SELECT id FROM session WHERE net_id = ? AND date = ? ORDER BY id DESC LIMIT 1",
+            (net_id, date),
+        ).fetchone()
+        return None if row is None else self.get_session(row["id"])
+
     def start_session(self, net_id: int, date: str) -> Session:
+        """Opens the night's session when the net already has one, else starts it."""
         _check_date(date)
+        existing = self.session_on(net_id, date)
+        if existing is not None:
+            return existing
         net = self.get_net(net_id)
         with self._conn:
             cursor = self._conn.execute(

@@ -113,3 +113,27 @@ def test_import_without_a_controller_uses_the_nets_saved_one(nets: NetRepository
         net_id, "2026-10-26", W2KV_TEXT, parse_roster(W2KV_TEXT), controller=None
     )
     assert (session.controller_call, session.controller_grid) == ("W2KV", "FN20ok")
+
+
+def test_start_session_twice_opens_the_same_session(nets: NetRepository) -> None:
+    # One session per net per night (owner, 2026-11-24).
+    net_id = two_metre_net(nets)
+    first = nets.start_session(net_id, "2026-11-23")
+    nets.close_session(first.id, "")
+    again = nets.start_session(net_id, "2026-11-23")
+    assert again.id == first.id and again.status == "closed"
+    assert nets.start_session(net_id, "2026-11-30").id != first.id
+
+
+def test_session_on(nets: NetRepository) -> None:
+    net_id = two_metre_net(nets)
+    assert nets.session_on(net_id, "2026-11-23") is None
+    made = nets.start_session(net_id, "2026-11-23")
+    assert nets.session_on(net_id, "2026-11-23") == made
+
+
+def test_import_refuses_a_night_that_has_a_session(nets: NetRepository) -> None:
+    net_id = two_metre_net(nets)
+    nets.start_session(net_id, "2026-10-26")
+    with pytest.raises(ValueError, match="already has a session on 2026-10-26"):
+        nets.import_roster(net_id, "2026-10-26", W2KV_TEXT, parse_roster(W2KV_TEXT))

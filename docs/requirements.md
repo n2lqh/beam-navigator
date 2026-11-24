@@ -88,7 +88,7 @@ Region centroids ship as a small static table (code, name, lat, lon, source), co
 1. Paste text (or Paste from Clipboard). Pick the net and date.
 2. The parser extracts one row per callsign: sequence, callsign, name, QTH, grid, published bearing, controller tag, confidence, warnings.
 3. A review table shows parsed rows plus **bearing and distance from the user**. The user can edit cells, exclude rows, pick the controller, and fix missing grids.
-4. **Save** commits the session with the raw text. Re-importing identical text for the same net and date asks whether to replace or keep both.
+4. **Save** commits the session with the raw text. Importing for a net and date that already has an imported session asks whether to replace it or cancel; a night has one session (owner, 2026-11-24).
 
 Parser requirements:
 - Deterministic and offline. No LLM, no network.
@@ -270,7 +270,7 @@ Parser rules these fixtures add:
 ### Roster and history
 11. Each fixture parses to its expected rows, controller and published bearings.
 12. Published bearings never appear in the "from you" column.
-13. Re-importing the same text for the same net and date prompts replace or keep.
+13. Re-importing for a net and date that already has an imported session asks Replace or Cancel; a night has one session (owner, 2026-11-24).
 14. Importing the W2KV roster for 2026-10-26 and starting a new session for 2026-11-02 shows its 17 stations as regulars not heard yet, none checked in.
 15. A substitute controller in one session leaves the net default and earlier sessions unchanged.
 

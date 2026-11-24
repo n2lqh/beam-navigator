@@ -143,7 +143,7 @@ def test_controller_choice(review: RosterReview, conn: sqlite3.Connection, net_i
     assert not any(row.is_controller for row in result.rows)
 
 
-def test_duplicate_detected_then_replace_or_keep(
+def test_duplicate_detected_then_replace_or_refuse(
     review: RosterReview, conn: sqlite3.Connection, net_id: int
 ) -> None:  # acceptance 13
     text = fixture("w2kv_144mhz_2026-10-26.txt")
@@ -153,8 +153,9 @@ def test_duplicate_detected_then_replace_or_keep(
     assert review.duplicate_of(net_id, "2026-10-26", again) == first.id
     review.save(net_id, "2026-10-26", again, replace_session_id=first.id)
     assert len(NetRepository(conn).sessions(net_id)) == 1
-    review.save(net_id, "2026-10-26", review.parse(text))
-    assert len(NetRepository(conn).sessions(net_id)) == 2
+    with pytest.raises(ValueError, match="already has a session"):  # one per night
+        review.save(net_id, "2026-10-26", review.parse(text))
+    assert len(NetRepository(conn).sessions(net_id)) == 1
 
 
 def test_activity_night_no_controller(review: RosterReview) -> None:
