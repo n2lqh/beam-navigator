@@ -310,6 +310,9 @@ def _grids_disagree(a: str, b: str) -> bool:
     return a[:length].upper() != b[:length].upper()
 
 
+FROM_NET_CONTROL_LIST = "From net control's list"  # notes on a check-in added after the net
+
+
 class NetRepository:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
@@ -750,6 +753,44 @@ class NetRepository:
             )
         checkin_id = cast(int, cursor.lastrowid)
         return next(c for c in self.checkins(session_id) if c.id == checkin_id)
+
+    def add_from_list(
+        self,
+        session_id: int,
+        stations: list[tuple[str, str | None, str | None, str | None, bool]],
+        raw_text: str,
+    ) -> list[CheckIn]:
+        """Stations net control listed that the operator missed, added after the net (owner,
+        2026-11-24). Each is (callsign, name, grid, qth, grid_looked_up). Works on a closed
+        session, which stays closed: this is an explicit choice on the Import page. A call
+        already in the session is skipped; nothing there changes. One transaction."""
+        session = self.get_session(session_id)
+        existing = self.checkins(session_id)
+        seen = {_base(c.callsign) for c in existing}
+        sequence = max((c.sequence or 0 for c in existing), default=0)
+        added: list[int] = []
+        with self._conn:
+            for callsign, name, grid, qth, looked_up in stations:
+                call = normalize_callsign(callsign)
+                if _base(call) in seen:
+                    continue
+                seen.add(_base(call))
+                sequence += 1
+                cursor = self._conn.execute(
+                    "INSERT INTO checkin (session_id, sequence, logged_at, callsign, name, grid,"
+                    " qth, notes, heard_state) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, 'not_heard')",
+                    (session_id, sequence, call, name, grid, qth, FROM_NET_CONTROL_LIST),
+                )  # fmt: skip
+                added.append(cast(int, cursor.lastrowid))
+                _insert_roster_station(self._conn, call, name, None if looked_up else grid, qth)
+            text = raw_text.strip()
+            if added and text and text not in (session.raw_text or ""):
+                earlier = (session.raw_text or "").rstrip()
+                joined = f"{earlier}\n\n{raw_text}" if earlier else raw_text
+                self._conn.execute(
+                    "UPDATE session SET raw_text = ? WHERE id = ?", (joined, session_id)
+                )
+        return [c for c in self.checkins(session_id) if c.id in added]
 
     def participants(self, net_id: int) -> list[Participant]:
         rows = self._conn.execute(
