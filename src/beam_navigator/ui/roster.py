@@ -8,6 +8,7 @@ from nicegui import run, ui
 from beam_navigator.core.models import Net
 from beam_navigator.qrz_client import NO_LOGIN, NOT_FOUND, QrzClient, QrzError
 from beam_navigator.qrz_login import NO_STORE
+from beam_navigator.roster_compare import Comparison, RosterCompare
 from beam_navigator.roster_review import Review, ReviewRow, RosterReview
 from beam_navigator.store.repositories import NetRepository
 
@@ -48,9 +49,10 @@ def new_net_dialog(
 
 def import_page(
     review: RosterReview, nets: NetRepository, band_names: list[str],
-    qrz: QrzClient | None = None,
+    qrz: QrzClient | None = None, compare: RosterCompare | None = None,
 ) -> None:  # fmt: skip
     state: dict[str, Review | None] = {"review": None}
+    compared: dict[str, Comparison | None] = {"result": None}
 
     def net_options() -> dict[int, str]:
         # Archived nets are left out of the picker (spec 4.6); their history stays.
@@ -71,8 +73,11 @@ def import_page(
     async def parse() -> None:
         current = review.parse(roster_text.value or "")
         state["review"] = current
+        compared["result"] = None
         saved_link.clear()
         table.refresh()
+        actions.refresh()
+        comparison.refresh()
         if qrz is not None:
             await grids_from_qrz(qrz, current)
 
@@ -187,8 +192,108 @@ def import_page(
                 _review_row(review, row)
 
         table()
-        net_select.on_value_change(lambda: table.refresh())
-        ui.button("Save", on_click=lambda: save()).props("size=lg").mark("save")
+
+        def night_changed() -> None:
+            compared["result"] = None
+            actions.refresh()
+            comparison.refresh()
+
+        @ui.refreshable
+        def actions() -> None:
+            night = None
+            if state["review"] is not None and net_select.value is not None:
+                night = review.session_for_night(net_select.value, (date_input.value or "").strip())
+            if compare is not None and night is not None and night.status in ("active", "closed"):
+                # One session per net per night (owner, 2026-11-24): compare, never a second one.
+                ui.label("You have your own session for this night.")
+                ui.button(
+                    "Compare with my session", on_click=lambda: show_comparison(night.id)
+                ).props("size=lg").mark("compare")
+            else:
+                ui.button("Save", on_click=lambda: save()).props("size=lg").mark("save")
+
+        def show_comparison(session_id: int) -> None:
+            current = state["review"]
+            if current is None or compare is None:
+                return
+            compared["result"] = compare.compare(session_id, current)
+            saved_link.clear()
+            comparison.refresh()
+
+        async def add_ticked() -> None:
+            result = compared["result"]
+            if result is None or compare is None:
+                return
+            if not any(row.add for row in result.missing):
+                ui.notify("Tick the stations to add.", type="warning")
+                return
+            if qrz is not None:
+                await details_from_qrz(qrz, result)
+            if compared["result"] is not result:
+                return  # parsed again or another night picked meanwhile
+            added = compare.add(result)
+            current = state["review"]
+            if current is not None:
+                compared["result"] = compare.compare(result.session_id, current)
+            comparison.refresh()
+            saved_link.clear()
+            with saved_link:
+                ui.label(f"Added {len(added)} stations").mark("compare-status")
+                ui.link("Open live net", f"/net/{result.session_id}")
+
+        async def details_from_qrz(client: QrzClient, result: Comparison) -> None:
+            """QRZ's details for the stations being added, one call at a time, only on the
+            Add press (offline-first). The first failure ends the pass; adding goes on."""
+            assert compare is not None
+            for call in compare.qrz_wanted(result):
+                qrz_status.set_text(f"Looking up on QRZ: {call}…")
+                try:
+                    record, notice = await run.io_bound(client.lookup, call)
+                except QrzError as exc:
+                    if str(exc).startswith(NOT_FOUND):
+                        continue
+                    if str(exc) not in (NO_LOGIN, NO_STORE):
+                        ui.notify(str(exc), type="warning", multi_line=True)
+                    break
+                review.store_qrz(record, notice)
+            qrz_status.set_text("")
+
+        @ui.refreshable
+        def comparison() -> None:
+            result = compared["result"]
+            if result is None:
+                return
+            with ui.row().classes("w-full gap-8 items-start"):
+                with ui.column().classes("gap-1").mark("compare-missing"):
+                    ui.label(f"Net control had, you didn't ({len(result.missing)})").classes(
+                        "text-lg"
+                    )
+                    for row in result.missing:
+                        detail = " · ".join(x for x in (row.name, row.grid, row.qth) if x)
+                        ui.checkbox(
+                            f"{row.callsign}  {detail}".strip(), value=row.add,
+                            on_change=lambda e, r=row: setattr(r, "add", bool(e.value)),
+                        ).mark(f"add-{row.callsign}")  # fmt: skip
+                    if result.missing:
+                        ui.button("Add ticked stations", on_click=add_ticked).mark("add-ticked")
+                with ui.column().classes("gap-1").mark("compare-only-mine"):
+                    ui.label(f"You had, net control didn't ({len(result.only_mine)})").classes(
+                        "text-lg"
+                    )
+                    for checkin in result.only_mine:
+                        detail = " · ".join(x for x in (checkin.name, checkin.grid) if x)
+                        ui.label(f"{checkin.callsign}  {detail}".strip())
+                with ui.column().classes("gap-1").mark("compare-both"):
+                    ui.label(f"On both lists ({len(result.both)})").classes("text-lg")
+                    for both in result.both:
+                        ui.label(both.callsign)
+                        for difference in both.differences:
+                            ui.label(difference).classes("text-warning")
+
+        actions()
+        comparison()
+        net_select.on_value_change(lambda: (table.refresh(), night_changed()))
+        date_input.on_value_change(night_changed)
         saved_link = ui.column()
 
 

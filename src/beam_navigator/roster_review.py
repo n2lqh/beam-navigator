@@ -155,6 +155,10 @@ class RosterReview:
                     filled += 1
         return filled
 
+    def store_qrz(self, record: QrzRecord, notice: str | None = None) -> None:
+        """Keeps a QRZ answer, as any lookup does."""
+        self._desk.qrz_store(record, notice)
+
     def recompute(self, row: ReviewRow) -> None:
         """Bearing and distance from the operator, after a grid edit."""
         found = self._desk.bearing_to(row.grid)

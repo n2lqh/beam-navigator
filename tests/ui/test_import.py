@@ -244,3 +244,100 @@ async def test_net_control_list_offers_the_nets_saved_one(
     await user.should_see("Saved")
     [session] = nets.sessions(net.id or 0)
     assert session[0].controller_call == "K3WWT"
+
+
+# Compare with my session (owner, 2026-11-24) ------------------------------------------
+
+
+@pytest.fixture
+def own_session(conn: sqlite3.Connection, net_id: int) -> int:
+    nets = NetRepository(conn)
+    session = nets.start_session(net_id, "2026-10-26")
+    nets.add_checkin(session.id, "K3WGR", grid="FN10")
+    nets.add_checkin(session.id, "W1AW")
+    return session.id
+
+
+def untick(user: User, call: str) -> None:
+    [box] = user.find(marker=f"add-{call}").elements
+    assert isinstance(box, ui.checkbox)
+    box.set_value(False)
+
+
+async def test_compare_shows_three_groups(
+    user: User, desk: Desk, net_id: int, own_session: int
+) -> None:
+    await paste_and_parse(user, desk, net_id)
+    await user.should_see("You have your own session for this night.")
+    await user.should_not_see(marker="save")
+    user.find(marker="compare").click()
+    await user.should_see("Net control had, you didn't (16)")
+    await user.should_see("You had, net control didn't (1)")
+    await user.should_see("W1AW")
+    await user.should_see("On both lists (1)")
+    await user.should_see("Grid: FN10 (you) · FN10xi (net control)")
+
+
+async def test_add_ticked_stations(
+    user: User, desk: Desk, net_id: int, own_session: int, conn: sqlite3.Connection,
+    sim: SimulationAdapter,
+) -> None:  # fmt: skip
+    await paste_and_parse(user, desk, net_id)
+    user.find(marker="compare").click()
+    await user.should_see("Net control had, you didn't (16)")
+    untick(user, "K4SO")
+    user.find(marker="add-ticked").click()
+    await user.should_see("Added 15 stations")
+    await user.should_see("Open live net")
+    nets = NetRepository(conn)
+    calls = [c.callsign for c in nets.checkins(own_session)]
+    assert len(calls) == 17 and "K4SO" not in calls
+    assert nets.get_session(own_session).raw_text == W2KV
+    assert sim.commands == []
+
+
+async def test_add_asks_qrz_once_per_call(
+    user: User, desk: Desk, net_id: int, own_session: int, conn: sqlite3.Connection
+) -> None:
+    stub = StubQrz()
+    register_pages(lambda: desk, stub)  # type: ignore[arg-type]
+    await user.open("/import")
+    pick(user, "roster-text", W2KV)
+    pick(user, "net", net_id)
+    pick(user, "date", "2026-10-26")
+    user.find(marker="parse").click()
+    await user.should_see("From you:")
+    before = list(stub.asked)  # Parse's own grid lookups
+    user.find(marker="compare").click()
+    await user.should_see("Net control had, you didn't (16)")
+    assert stub.asked == before  # nothing asked until Add
+    user.find(marker="add-ticked").click()
+    await user.should_see("Added 16 stations")
+    after = stub.asked[len(before):]
+    assert len(after) == len(set(after)) and not set(after) & set(before)
+    calls = {c.callsign for c in NetRepository(conn).checkins(own_session)}
+    assert set(after) <= calls and len(after) + len(before) >= 16
+
+
+async def test_add_without_qrz_login(
+    user: User, desk: Desk, net_id: int, own_session: int
+) -> None:  # Review Focus 5
+    await paste_and_parse(user, desk, net_id)  # the real client, with no login saved
+    user.find(marker="compare").click()
+    await user.should_see("Net control had, you didn't (16)")
+    user.find(marker="add-ticked").click()
+    await user.should_see("Added 16 stations")
+    await user.should_not_see("Set up your QRZ login")
+
+
+async def test_actions_follow_the_picked_night(
+    user: User, desk: Desk, net_id: int, own_session: int
+) -> None:  # Review Focus 1
+    await paste_and_parse(user, desk, net_id)
+    await user.should_see(marker="compare")
+    pick(user, "date", "2026-10-27")
+    await user.should_see(marker="save")
+    await user.should_not_see(marker="compare")
+    pick(user, "date", "2026-10-26")
+    await user.should_see(marker="compare")
+    await user.should_not_see(marker="save")

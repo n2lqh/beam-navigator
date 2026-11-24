@@ -144,6 +144,16 @@ The review table shows each station with its bearing and distance **from you**. 
 
 The stations and grids are saved for next time (a roster never overwrites a station you saved yourself), and the original text is kept with the session. If a station's grid came from an earlier roster and this roster gives a different one, the row shows **Replace earlier roster grid …**: tick it to use the new grid, or leave it to keep the old one. Importing again for a net and date that already has an imported list asks whether to **Replace** it or **Cancel**: a net has one session per night.
 
+## Comparing with net control's list
+
+A net has one session per night. If you followed the net yourself and net control later publishes the official list, paste it on **Import** as usual, pick the net and date, and press **Parse**. Because you already have a session for that night, **Save** is replaced by **Compare with my session**. Press it to see three groups:
+
+- **Net control had, you didn't**: each station is ticked. Untick any you don't want, then press **Add ticked stations**.
+- **You had, net control didn't**: shown only. Nothing is removed.
+- **On both lists**: shown only. A name or grid that differs is highlighted, and your log isn't changed.
+
+The added stations go into your session for that night, marked **Not heard** with the note "From net control's list", so your own log stays truthful and they count as regulars next time. With a QRZ login, QRZ fills in any missing name, grid or QTH and replaces a rough 4-character grid with its exact 6-character one (only when QRZ's position came from the station or its address). This works even after you've closed the session, which stays closed. The pasted list is kept with your session. Your own callsign is left out of the comparison.
+
 ## Nets and history
 
 **Nets** lists your nets in week order from today: today's nets first (favourites, then by start time), then the rest of the week, then nets with no schedule. Use **Search nets** (name, frequency, band or controller), the star to mark favourites, and **Favourites only** to show just those. Each net has **Edit**, **Duplicate** and **Export**; **New net** adds one, and **Import nets (\*.beamnet.json)** adds nets from a file someone shared. Importing never overwrites a net with the same name. In the net form, **Time zone** is a list you can type into to search; a new net starts on your station's time zone, and **Same as my station** keeps a net on whatever your station uses.

@@ -34,6 +34,7 @@ from beam_navigator.desk import Desk
 from beam_navigator.net_control import NetControl
 from beam_navigator.nets import NetBook
 from beam_navigator.qrz_client import QrzClient
+from beam_navigator.roster_compare import RosterCompare
 from beam_navigator.roster_review import RosterReview
 from beam_navigator.rotators.service import RotateService
 from beam_navigator.store.db import open_db
@@ -280,7 +281,10 @@ def register_pages(
         header()
         desk = desk_factory()
         bands = [band.name for band in desk.bands.list()]
-        import_page(RosterReview(desk.conn, desk), NetRepository(desk.conn), bands, qrz)
+        import_page(
+            RosterReview(desk.conn, desk), NetRepository(desk.conn), bands, qrz,
+            RosterCompare(desk.conn, desk),
+        )  # fmt: skip
 
     @page("/nets")
     def nets() -> None:
