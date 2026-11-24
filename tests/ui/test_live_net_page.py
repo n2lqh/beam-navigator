@@ -309,6 +309,28 @@ async def test_via_relay_asks_for_the_call(
     assert (saved.heard_state, saved.relay_call) == ("relay", "W2KV")
 
 
+
+async def test_heard_remove_asks_then_deletes_the_typo(
+    user: User, desk: Desk, w2kv: int, conn: sqlite3.Connection, sim: SimulationAdapter
+) -> None:  # owner, 2026-11-24: "delete a typo under the heard dropdown"
+    await open_net(user, desk, w2kv)
+    before = NetRepository(conn).checkins(w2kv)
+    first = before[0]
+    [heard] = user.find(marker=f"heard-{first.id}").elements
+    assert isinstance(heard, ui.select)
+    heard.set_value("remove")
+    await user.should_see(f"Remove {first.callsign} from this session?")
+    user.find(marker="remove-cancel").click()
+    assert len(NetRepository(conn).checkins(w2kv)) == len(before)
+    [heard] = user.find(marker=f"heard-{first.id}").elements
+    assert isinstance(heard, ui.select)
+    heard.set_value("remove")
+    user.find(marker="remove-confirm").click()
+    await user.should_see(f"Removed {first.callsign}")
+    assert [c.id for c in NetRepository(conn).checkins(w2kv)] == [c.id for c in before[1:]]
+    assert sim.commands == []
+
+
 async def test_heard_select_click_does_not_reach_the_row(
     user: User, desk: Desk, w2kv: int, conn: sqlite3.Connection
 ) -> None:  # final review I2: opening the menu must not select (and rebuild) the row
@@ -425,7 +447,9 @@ async def test_i_hear_logs_and_moves_regular(
     press_enter(user, "callsign")  # the next logs
     await user.should_see("Logged W2KV")
     [checkin] = NetRepository(conn).checkins(tonight)
-    assert checkin.callsign == "W2KV" and checkin.heard_state == "heard"
+    # Not marked Heard: the call usually comes from net control's announcement
+    # (owner, 2026-11-24); the Heard state is the operator's own choice.
+    assert checkin.callsign == "W2KV" and checkin.heard_state is None
     await user.should_not_see(marker="regular-W2KV")
     assert sim.commands == []
 
@@ -480,13 +504,30 @@ async def test_a_called_station_lights_where_net_control_points(
     await open_net(user, desk, w2kv)
     await user.should_see("Net control is pointing")
     entry(user, "callsign").set_value("K4SO")  # FM18AP, south-west of W2KV's FN20ok
-    await user.should_see("Net control is pointing SW")
+    # A guess from the station's location (owner, 2026-11-24: "i think net control is pointing")
+    await user.should_see("Net control is probably pointing SW")
     [lit] = user.find(marker="sector-SW").elements
     [other] = user.find(marker="sector-S").elements
     assert lit.props.get("outline") is not True and other.props.get("outline") is True
-    user.find(marker="sector-S").click()
+    user.find(marker="sector-S").click()  # the operator heard net control say it
     await user.should_see("Net control is pointing S")
+    await user.should_not_see("probably")
     await user.should_see(SECTOR_UP)
+    assert sim.commands == []
+
+
+async def test_logging_a_station_keeps_the_compass_on_it(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:  # owner, 2026-11-24: "if i check in a person ... move the net control is pointing"
+    await open_net(user, desk, w2kv)  # net control W2KV, FN20ok
+    user.find(marker="sector-N").click()
+    await user.should_see("Net control is pointing N")
+    entry(user, "callsign").set_value("K9ZZZ")
+    entry(user, "grid").set_value("FM18ap")  # south-west of FN20ok
+    press_enter(user, "callsign")
+    await user.should_see("Logged K9ZZZ")
+    assert entry(user, "callsign").value == ""
+    await user.should_see("Net control is probably pointing SW")
     assert sim.commands == []
 
 
@@ -642,6 +683,19 @@ async def test_i_hear_one_enter_fills_and_logs(
     [checkin] = NetRepository(conn).checkins(tonight)
     assert checkin.callsign == "W2KV" and checkin.grid == "FN20OK"
     assert entry(user, "callsign").value == ""
+    assert sim.commands == []
+
+
+async def test_i_hear_clear_button_empties_the_line(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:  # owner, 2026-11-24: "clear button here"
+    tonight = tonight_after(conn, w2kv)
+    await open_net(user, desk, tonight)
+    entry(user, "callsign").set_value("W2KV")
+    entry(user, "report").set_value("59")
+    user.find(marker="i-hear-clear").click()
+    assert entry(user, "callsign").value == "" and entry(user, "report").value == ""
+    assert NetRepository(conn).checkins(tonight) == []
     assert sim.commands == []
 
 async def test_find_and_i_hear_sit_above_the_lists(user: User, desk: Desk, w2kv: int) -> None:

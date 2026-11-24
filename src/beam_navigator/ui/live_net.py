@@ -31,7 +31,7 @@ from beam_navigator.ui.entry_line import EntryLine
 
 COMPASS_LAYOUT = [["NW", "N", "NE"], ["W", "", "E"], ["SW", "S", "SE"]]
 HEARD_OPTIONS = {"": "—", "heard": "Heard", "weak": "Weak", "not_heard": "Not heard",
-                 "relay": "Via relay"}  # fmt: skip
+                 "relay": "Via relay", "remove": "Remove (typo)"}  # fmt: skip
 # Each list sorts on its own (owner, 2026-10-30); "Roster order" read as jargon.
 TONIGHT_SORTS = {"roster": "Check-in order", "callsign": "Callsign", "bearing": "Direction",
                  "distance": "Distance"}  # fmt: skip
@@ -56,6 +56,8 @@ BLUR_ACTIVE = "() => document.activeElement && document.activeElement.blur()"
 # Clicks on a row's own button (Heard) are that button's, not the row's.
 ROW_CLICK = "(e) => { if (!(e.target.closest('.q-field') || e.target.closest('.q-btn'))) emit(e) }"
 POINTING = "Net control is pointing"  # + the sector (owner, 2026-11-21)
+# Worked out from the called station's location, not heard from net control (2026-11-24).
+PROBABLY_POINTING = "Net control is probably pointing"
 PRESS_DIRECTION = "Press the direction net control is calling, or type the call"
 
 
@@ -127,10 +129,12 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
             stop_watching()
             pressed(live.snap_back(session_id, state.rotator_id))
 
-    def point(sector: str | None) -> None:
-        """Lights the sector net control points to; records and moves nothing."""
+    def point(sector: str | None, guessed: bool = False) -> None:
+        """Lights the sector net control points to; records and moves nothing. guessed:
+        from the called station's location rather than the operator's own press."""
         state.pointing = sector
-        legend.set_text(f"{POINTING} {sector}" if sector else POINTING)
+        label = PROBABLY_POINTING if guessed and sector else POINTING
+        legend.set_text(f"{label} {sector}" if sector else POINTING)
         for name, button in compass.items():
             button.props(remove="outline unelevated")
             button.props("unelevated" if name == sector else "outline")
@@ -161,12 +165,12 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
         pick("station", TONIGHT)
         row = next((r for r in live.view(session_id).rows if r.checkin_id == checkin_id), None)
         if row is not None:
-            point(live.controller_pointing(session_id, row.callsign))
+            point(live.controller_pointing(session_id, row.callsign), guessed=True)
 
     def select_regular(callsign: str) -> None:
         state.callsign = callsign
         pick("regular", REGULARS)
-        point(live.controller_pointing(session_id, callsign))
+        point(live.controller_pointing(session_id, callsign), guessed=True)
 
     def point_at(text: str) -> None:
         """Enter on a grid, alias or direction in the one box: it becomes the Target. Never
@@ -197,7 +201,7 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
             pick("typed", I_HEAR)
         sector = live.controller_pointing(session_id, call, grid)
         if sector != state.pointing:
-            point(sector)
+            point(sector, guessed=True)
 
     def aim_heard(found: tuple[str, Bearing] | None) -> None:
         """Aim to <call>: back to the station on the line after picking another."""
@@ -238,6 +242,12 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
         controls.refresh()
 
     def set_heard(checkin_id: int, value: str, relay: str | None = None) -> None:
+        if value == "remove":
+            remove_target["id"] = checkin_id
+            remove_text.set_text(f"Remove {checkin_call(checkin_id)}"
+                                 " from this session?")  # fmt: skip
+            remove_dialog.open()  # the row keeps its state unless Remove is pressed
+            return
         if value == "relay" and relay is None:
             relay_target["id"] = checkin_id
             relay_call.set_value("")
@@ -308,6 +318,37 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
     def cancel_relay() -> None:
         relay_dialog.close()
         lists.refresh()  # puts the row's select back to its saved state
+
+    remove_target: dict[str, int | None] = {"id": None}
+
+    def checkin_call(checkin_id: int) -> str:
+        return next((c.callsign for c in live.nets.checkins(session_id) if c.id == checkin_id), "")
+
+    def confirm_remove() -> None:
+        checkin_id = remove_target["id"]
+        remove_dialog.close()
+        if checkin_id is None:
+            return
+        call = checkin_call(checkin_id)
+        try:
+            live.nets.remove_checkin(checkin_id)
+        except ValueError as exc:
+            _error(exc)
+        else:
+            ui.notify(f"Removed {call}")
+        lists.refresh()
+
+    def cancel_remove() -> None:
+        remove_dialog.close()
+        lists.refresh()
+
+    with ui.dialog() as remove_dialog, ui.card():
+        remove_text = ui.label("").classes("text-lg")
+        with ui.row():
+            ui.button("Remove", on_click=confirm_remove).mark("remove-confirm")
+            ui.button("Cancel", on_click=cancel_remove).props("flat autofocus").mark(
+                "remove-cancel"
+            )
 
     with ui.dialog() as close_dialog, ui.card():
         ui.label("Close my session").classes("text-lg")
@@ -549,6 +590,9 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                         button.set_enabled(found is not None)
                         if qrz is not None:
                             i_hear.qrz_button()
+                        ui.button("Clear", on_click=i_hear.clear).props("flat").mark(
+                            "i-hear-clear"
+                        )  # owner, 2026-11-24; the Clear key does the same
 
                 heard_aim()
                 i_hear.set_enabled(not first.closed)

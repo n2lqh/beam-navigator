@@ -79,7 +79,7 @@ class EntryLine:
     (owner, 2026-11-21: type the call net control gives, then Ctrl+Enter).
     on_callsign runs whenever the typed call or its details change (the info panel);
     on_logged after each log or update; on_note when the station-note key is pressed.
-    heard=True logs through NetControl.log_heard (the participant's line). on_point: Enter
+    heard=True is the participant's I-hear line. on_point: Enter
     on callsign-box text that is no callsign (a grid, alias or direction) goes there instead
     of logging, so one box both checks in and points (owner, 2026-11-21).
     """
@@ -404,9 +404,10 @@ class EntryLine:
 
     def finish_log(self, typed: Entry, update_record: bool) -> None:
         self.changes_dialog.close()
-        log = self.control.log_heard if self.heard else self.control.log
+        # The I-hear line no longer marks Heard: the call is usually net control's
+        # announcement (owner, 2026-11-24). The regulars' Heard button still does.
         try:
-            logged = log(self.session_id, typed, update_record=update_record)
+            logged = self.control.log(self.session_id, typed, update_record=update_record)
         except DuplicateCheckIn:
             self.start_log()
             return

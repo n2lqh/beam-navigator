@@ -51,7 +51,8 @@ def test_wraps_north() -> None:
 def test_not_my_sector_message() -> None:
     result = check_sector("N", 174.2)
     assert result.up is False
-    assert result.message == "Not your sector — you are S of the controller."
+    # owner, 2026-11-24: "would be nice if it said what direction you are waiting for"
+    assert result.message == "Not your sector — wait for S. You are S of net control."
 
 
 def test_unknown_sector_rejected() -> None:

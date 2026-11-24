@@ -3,6 +3,7 @@ rotator command (invariant 2): choosing a preferred rotator only records it."""
 
 from collections.abc import Callable
 from datetime import UTC, date, datetime
+from zoneinfo import available_timezones
 
 from nicegui import events, run, ui
 
@@ -37,6 +38,9 @@ def _export(nets: list[Net]) -> None:
     ui.download.content(write_beamnet(nets), beamnet_filename(nets, date.today()))
 
 
+ZONES = sorted(z for z in available_timezones() if "/" in z or z == "UTC")  # no "Factory"
+
+
 def net_form_dialog(
     book: NetBook,
     band_names: list[str],
@@ -55,7 +59,10 @@ def net_form_dialog(
                 "w-36"
             ).mark("form-weekday")
             start = ui.input("Start (HH:MM)").classes("w-28").mark("form-start")
-        zone = ui.input("Time zone (e.g. America/New_York)").classes("w-full").mark("form-zone")
+        # A picker, typed into to filter (owner, 2026-11-24: "should have TZ Picker").
+        zone = ui.select({}, label="Time zone", with_input=True).classes("w-full").mark(
+            "form-zone"
+        )
         with ui.row().classes("w-full no-wrap"):
             frequency = ui.input("Frequency, MHz").classes("w-36").mark("form-frequency")
             channel = ui.input("Channel or talkgroup").classes("w-44").mark("form-channel")
@@ -101,7 +108,13 @@ def net_form_dialog(
         name.set_value(values.name if values else "")
         weekday.set_value(values.weekday if values else None)
         start.set_value(values.start_time if values else "")
-        zone.set_value(values.timezone if values else "")
+        station = book.station_zone()
+        chosen = values.timezone if values else station
+        options = {"": f"Same as my station ({station or 'this computer'})"}
+        options.update({name: name for name in ZONES})
+        if chosen and chosen not in options:
+            options[chosen] = chosen  # an old, unknown name: shown so Save can say why
+        zone.set_options(options, value=chosen)
         frequency.set_value(values.frequency if values else "")
         channel.set_value(values.channel if values else "")
         mode.set_value(values.mode if values else "")

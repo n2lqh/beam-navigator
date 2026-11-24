@@ -94,10 +94,37 @@ async def test_form_error_shown(user: User, desk: Desk, conn: sqlite3.Connection
     await open_nets(user, desk)
     user.find(marker="new-net").click()
     element(user, "form-name").set_value("Test net")
-    element(user, "form-zone").set_value("America/NewYork")
+    element(user, "form-weekday").set_value(1)
+    element(user, "form-start").set_value("8pm")
     user.find(marker="form-save").click()
-    await user.should_see("Unknown time zone")
+    await user.should_see("Start time must be HH:MM")
     assert NetRepository(conn).list_nets() == []
+
+
+
+async def test_zone_picker_starts_new_nets_on_the_station_zone(
+    user: User, desk: Desk
+) -> None:  # owner, 2026-11-24: "should have TZ Picker - default to TZ in profile"
+    await open_nets(user, desk)
+    user.find(marker="new-net").click()
+    zone = element(user, "form-zone")
+    assert isinstance(zone, ui.select)
+    assert zone.value == "America/New_York"
+    assert "America/Chicago" in zone.options and "Europe/London" in zone.options
+
+
+async def test_zone_picker_keeps_a_net_on_the_station_zone(
+    user: User, desk: Desk, book: NetBook
+) -> None:
+    net = book.save(form(timezone=""))
+    await open_nets(user, desk)
+    user.find(marker=f"edit-{net.id}").click()
+    zone = element(user, "form-zone")
+    assert zone.value == ""
+    assert zone.options[""] == "Same as my station (America/New_York)"
+    user.find(marker="form-save").click()
+    await user.should_see("Saved Test net")
+    assert net.id is not None and book.form_for(net.id).timezone == ""
 
 
 async def test_edit_fills_form(user: User, desk: Desk, book: NetBook) -> None:

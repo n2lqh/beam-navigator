@@ -697,6 +697,10 @@ def _rotators_panel(desk: Desk) -> None:
         offset.set_value(f"{profile.offset:g}")
         speed.set_value("" if profile.speed_deg_per_s is None else f"{profile.speed_deg_per_s:g}")
         bands.set_value(list(profile.bands))
+        form_title.set_text(f"Editing {profile.name}")
+        # The form sits below the list; focusing its first box scrolls it into view
+        # (owner, 2026-11-24: Edit seemed to do nothing).
+        name.run_method("focus")
 
     def apply_preset(preset_name: str | None) -> None:
         travel = PRESETS.get(preset_name or "")
@@ -734,11 +738,13 @@ def _rotators_panel(desk: Desk) -> None:
             _error(exc)
             return
         editing["profile"] = saved
+        form_title.set_text(f"Editing {saved.name}")
         ui.notify(f"Saved {saved.name}")
         rotator_list.refresh()
 
     def new() -> None:
         editing["profile"] = None
+        form_title.set_text("Add a rotator")
         for field in (name, host, port, offset, speed):
             field.set_value("")
         adapter.set_value("simulation")
@@ -747,7 +753,7 @@ def _rotators_panel(desk: Desk) -> None:
 
     rotator_list()
     ui.separator()
-    ui.label("Add or edit a rotator").classes("text-lg")
+    form_title = ui.label("Add a rotator").classes("text-lg").mark("rotator-form-title")
     with ui.grid(columns=2).classes("w-full gap-2"):
         name = ui.input("Rotator name", placeholder="VHF").mark("rotator-name")
         adapter = ui.select(ADAPTERS, value="simulation", label="Adapter").mark("rotator-adapter")

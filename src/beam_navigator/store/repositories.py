@@ -595,6 +595,12 @@ class NetRepository:
         if cursor.rowcount != 1:
             raise ValueError(f"No check-in with id {checkin_id}.")
 
+    def remove_checkin(self, checkin_id: int) -> None:
+        """Deletes a mistaken check-in (a typo) from an open session (owner, 2026-11-24)."""
+        self._check_open(self.get_checkin_session(checkin_id))
+        with self._conn:
+            self._conn.execute("DELETE FROM checkin WHERE id = ?", (checkin_id,))
+
     def update_checkin(
         self,
         checkin_id: int,

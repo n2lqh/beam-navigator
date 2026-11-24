@@ -610,3 +610,14 @@ async def test_exact_grids_uses_saved_qrz_answers_and_names_other_squares(
     await user.should_see("QRZ puts these in another square; check them: AA7BQ (DM32af)")
     saved = desk.stations.get("AA7BQ")
     assert saved is not None and saved.grid == "FN20"
+
+
+async def test_rotator_edit_names_the_rotator_on_the_form(
+    user: User, desk: Desk, conn: sqlite3.Connection
+) -> None:  # owner, 2026-11-24: Edit seemed to do nothing; the form was off screen
+    rotator = add_pst(conn)
+    await open_tab(user, desk, "Rotators")
+    await user.should_see("Add a rotator")
+    user.find(marker=f"edit-{rotator}").click()
+    await user.should_see("Editing VHF")
+    assert element(user, "rotator-name").value == "VHF"

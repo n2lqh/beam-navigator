@@ -51,4 +51,5 @@ def check_sector(
     if _arc(controller_to_user_deg, centre) <= tolerance_deg:
         return SectorCheck(True, SECTOR_UP)
     where = sector_name(controller_to_user_deg)
-    return SectorCheck(False, f"Not your sector — you are {where} of the controller.")
+    message = f"Not your sector — wait for {where}. You are {where} of net control."
+    return SectorCheck(False, message)

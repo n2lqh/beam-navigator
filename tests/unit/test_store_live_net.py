@@ -77,6 +77,24 @@ def test_set_heard_and_relay(conn: sqlite3.Connection) -> None:
     assert nets.checkins(session_id)[0].heard_state is None
 
 
+
+def test_remove_checkin_only_in_an_open_session(conn: sqlite3.Connection) -> None:
+    # owner, 2026-11-24: "need to be able to delete a typo"
+    from beam_navigator.store.repositories import SessionClosed
+
+    nets = NetRepository(conn)
+    session_id = import_w2kv(conn, add_net(conn))
+    first, second = nets.checkins(session_id)[:2]
+    nets.remove_checkin(first.id)
+    assert [c.id for c in nets.checkins(session_id)][0] == second.id
+    with pytest.raises(ValueError):
+        nets.remove_checkin(first.id)  # already gone
+    nets.close_session(session_id, "")
+    with pytest.raises(SessionClosed):
+        nets.remove_checkin(second.id)
+    assert second.id in [c.id for c in nets.checkins(session_id)]
+
+
 def test_list_nets_and_sessions(conn: sqlite3.Connection) -> None:
     nets = NetRepository(conn)
     old = add_net(conn, "Archived net", archived=True)

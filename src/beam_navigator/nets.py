@@ -186,6 +186,11 @@ class NetBook:
         """Nets a roster can be imported into: archived ones are left out."""
         return [net for net in self.nets.list_nets() if not net.archived]
 
+    def station_zone(self) -> str:
+        """The active profile's time zone name; blank means this computer's."""
+        profile = self.desk.profiles.get_active()
+        return profile.timezone if profile else ""
+
     def next_text(self, net: Net, now: datetime) -> str:
         if net.weekday is None or net.start_time is None:
             return occurrence_text(None)
