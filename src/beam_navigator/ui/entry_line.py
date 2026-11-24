@@ -293,6 +293,12 @@ class EntryLine:
         self.on_callsign()
         return self.qrz is not None and self.control.desk.qrz_auto(found.callsign)
 
+    async def fill_and_log(self) -> None:
+        """Fills from the record, waits for QRZ when it should be asked, then logs."""
+        if self.autofill():
+            await self.qrz_lookup(auto=True)
+        self.start_log()
+
     def advance_from_callsign(self) -> None:
         if self.autofill():
             # Runs once, after this key is handled, so typing carries on meanwhile.
@@ -337,6 +343,9 @@ class EntryLine:
             call = self.callsign.upper()
             if name == "callsign" and state.highlighted is not None:
                 self.pick(state.suggestions[state.highlighted].callsign)
+            elif name == "callsign" and call and state.filled_for != call and self.heard:
+                # One Enter fills and logs on the I-hear line (owner, 2026-11-24).
+                ui.timer(0, self.fill_and_log, once=True)
             elif name == "callsign" and call and state.filled_for != call:
                 self.advance_from_callsign()  # first Enter fills; the next logs (decision 31)
             else:

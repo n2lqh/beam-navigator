@@ -600,15 +600,17 @@ async def test_i_hear_aim_names_the_call_and_sits_left_of_qrz(
 async def test_i_hear_new_call_clears_the_last_station(
     user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int
 ) -> None:  # owner, 2026-11-18: a grid left on the line blocked the next lookup
-    await open_net(user, desk, tonight_after(conn, w2kv))
+    tonight = tonight_after(conn, w2kv)
+    await open_net(user, desk, tonight)
     entry(user, "callsign").set_value("K9ZZZ")
     entry(user, "grid").set_value("EM99")
     entry(user, "report").set_value("59")
     entry(user, "callsign").set_value("W2KV")
-    assert entry(user, "report").value == ""
-    press_enter(user, "callsign")
-    assert entry(user, "grid").value == "FN20OK"
-    await user.should_see("Aim to W2KV")
+    assert entry(user, "report").value == "" and entry(user, "grid").value == ""
+    press_enter(user, "callsign")  # one Enter logs (owner, 2026-11-24)
+    await user.should_see("Logged W2KV")
+    [checkin] = NetRepository(conn).checkins(tonight)
+    assert checkin.grid == "FN20OK" and not checkin.report
 
 
 async def test_i_hear_fills_after_a_pause_without_enter(
@@ -627,6 +629,20 @@ async def test_i_hear_fills_after_a_pause_without_enter(
     await user.should_see("Logged W2KV")
     assert sim.commands == []
 
+
+
+async def test_i_hear_one_enter_fills_and_logs(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:  # owner, 2026-11-24: "pressing enter on the 2nd field commits the record"
+    tonight = tonight_after(conn, w2kv)
+    await open_net(user, desk, tonight)
+    entry(user, "callsign").set_value("W2KV")
+    press_enter(user, "callsign")  # at once, before the pause lookup
+    await user.should_see("Logged W2KV")
+    [checkin] = NetRepository(conn).checkins(tonight)
+    assert checkin.callsign == "W2KV" and checkin.grid == "FN20OK"
+    assert entry(user, "callsign").value == ""
+    assert sim.commands == []
 
 async def test_find_and_i_hear_sit_above_the_lists(user: User, desk: Desk, w2kv: int) -> None:
     # owner, 2026-11-18: with a long Tonight list both must stay on screen
