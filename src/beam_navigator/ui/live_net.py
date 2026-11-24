@@ -1,6 +1,6 @@
 """The live net screen (requirements 4.4). One Target: whatever was picked last. Only
-Rotate and Rotate to net control reach the rotator (invariant 2); everything else here
-only reads or records."""
+Rotate, Rotate to net control and Stop reach the rotator (invariant 2); everything else
+here only reads, picks or records."""
 
 import time
 from collections.abc import Callable
@@ -28,6 +28,7 @@ from beam_navigator.qrz_client import QrzClient, QrzError
 from beam_navigator.rotators.service import RotateOutcome
 from beam_navigator.store.repositories import DuplicateCheckIn
 from beam_navigator.ui.entry_line import EntryLine
+from beam_navigator.ui.lookup import STOP_NOTE
 
 COMPASS_LAYOUT = [["NW", "N", "NE"], ["W", "", "E"], ["SW", "S", "SE"]]
 HEARD_OPTIONS = {"": "—", "heard": "Heard", "weak": "Weak", "not_heard": "Not heard",
@@ -143,6 +144,18 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
             banner.classes(replace="")
         else:
             announce(sector)
+
+    def compass_click(sector: str) -> None:
+        """Net control points this way, and the direction becomes the Target, so Rotate can
+        turn there (owner, 2026-11-24). Never rotates by itself (invariant 2)."""
+        point(sector)
+        point_at(sector)
+
+    def stop() -> None:
+        """The explicit Stop press, as on the Dashboard."""
+        if state.rotator_id is not None:
+            stop_watching()
+            status.set_text(desk.stop(state.rotator_id))
 
     def announce(sector: str) -> None:
         if state.pointing != sector:
@@ -448,6 +461,13 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                     ui.label("Home").classes("text-caption")
                     for button in (rotate_button, snap):
                         button.on("click", js_handler=BLUR)
+                    if chosen is not None and chosen.id is not None and (
+                        desk.service.capabilities(chosen.id).has_stop
+                    ):
+                        ui.button("Stop", on_click=stop, color="negative").classes(
+                            "w-full"
+                        ).mark("stop").on("click", js_handler=BLUR)
+                        ui.label(STOP_NOTE).classes("text-caption text-grey")
                     if rotators:
                         options = {r.id: r.name for r in rotators if r.id is not None}
                         with ui.row().classes("items-center gap-2"):
@@ -475,7 +495,7 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                         for sector in line:
                             if sector:
                                 compass[sector] = ui.button(
-                                    sector, on_click=lambda s=sector: point(s)
+                                    sector, on_click=lambda s=sector: compass_click(s)
                                 ).props("outline").mark(f"sector-{sector}")
                                 compass[sector].on("click", js_handler=BLUR)
                             else:

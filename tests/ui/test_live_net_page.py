@@ -531,6 +531,29 @@ async def test_logging_a_station_keeps_the_compass_on_it(
     assert sim.commands == []
 
 
+
+async def test_compass_click_makes_the_direction_the_target_rotate_moves(
+    user: User, desk: Desk, w2kv: int, sim: SimulationAdapter
+) -> None:  # owner, 2026-11-24: "clicking s would be nice if i could rotate there"
+    await open_net(user, desk, w2kv)
+    user.find(marker="sector-S").click()
+    await user.should_see("180.0° S")
+    assert sim.commands == []  # a click only picks: Rotate moves (invariant 2)
+    user.find(marker="rotate").click()
+    await user.should_see("Simulated:")
+    assert [(c.command, c.azimuth) for c in sim.commands] == [("set_azimuth", 180.0)]
+
+
+async def test_stop_on_the_live_net_screen(
+    user: User, desk: Desk, w2kv: int, sim: SimulationAdapter
+) -> None:  # owner, 2026-11-24: "stop button would be good"
+    await open_net(user, desk, w2kv)
+    user.find(marker="rotate").click()
+    await user.should_see("Simulated:")
+    user.find(marker="stop").click()
+    assert sim.commands[-1].command == "stop"
+    await user.should_see("Stop does not replace the controller's physical stop.")
+
 async def test_close_with_notes_then_next_session_shows_them(
     user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, w2kv_net: int
 ) -> None:  # acceptance 44
