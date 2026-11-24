@@ -527,3 +527,51 @@ async def test_new_profile_time_zone_is_this_computers(user: User, desk: Desk) -
     )
     await open_tab(user, desk, "Station")
     await eventually(lambda: element(user, "profile-timezone").value == "America/Chicago")
+
+
+def browser_zone(user: User, name: str) -> None:
+    import re
+
+    user.javascript_rules[re.compile(r".*resolvedOptions\(\)\.timeZone.*")] = lambda _: name
+
+
+async def test_station_tab_shows_the_saved_time_zone(
+    user: User, desk: Desk, conn: sqlite3.Connection
+) -> None:  # owner, 2026-11-24: the tab showed New York while the profile was UTC
+    add_profile(conn)
+    browser_zone(user, "America/New_York")
+    await open_tab(user, desk, "Station")
+    await user.should_see("Home · FM29pt · km · UTC")
+    await asyncio.sleep(0.1)  # the browser's zone must not replace the saved one
+    assert element(user, "profile-timezone").value == "UTC"
+    assert element(user, "profile-name").value == "Home"
+
+
+async def test_station_tab_edits_the_active_profile_in_place(
+    user: User, desk: Desk, conn: sqlite3.Connection
+) -> None:
+    add_profile(conn)
+    await open_tab(user, desk, "Station")
+    timezone = element(user, "profile-timezone")
+    assert isinstance(timezone, ui.input)
+    timezone.set_value("America/New_York")
+    user.find("Save station").click()
+    await user.should_see("Home · FM29pt · km · America/New_York")
+    [profile] = ProfileRepository(conn).list()
+    assert profile.timezone == "America/New_York"
+
+
+async def test_new_profile_starts_blank_with_this_computers_zone(
+    user: User, desk: Desk, conn: sqlite3.Connection
+) -> None:
+    add_profile(conn)
+    browser_zone(user, "America/Chicago")
+    await open_tab(user, desk, "Station")
+    user.find("New profile").click()
+    await eventually(lambda: element(user, "profile-timezone").value == "America/Chicago")
+    assert element(user, "profile-name").value == ""
+    user.find(marker="profile-name").type("Portable")
+    user.find(marker="profile-grid").type("FN20ok")
+    user.find("Save station").click()
+    await user.should_see("Portable · FN20ok")
+    assert len(ProfileRepository(conn).list()) == 2

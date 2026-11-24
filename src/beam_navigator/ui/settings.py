@@ -457,7 +457,8 @@ def _station_panel(desk: Desk) -> None:
     def profile_list() -> None:
         for profile in desk.profiles.list():
             with ui.row().classes("items-center gap-4"):
-                ui.label(f"{profile.name} · {profile.home_grid} · {profile.units}")
+                zone = profile.timezone or "this computer's time zone"
+                ui.label(f"{profile.name} · {profile.home_grid} · {profile.units} · {zone}")
                 if profile.is_active:
                     ui.badge("Active")
                 elif profile.id is not None:
@@ -479,6 +480,13 @@ def _station_panel(desk: Desk) -> None:
         units.set_value(profile.units)
         timezone.set_value(profile.timezone)
         region.set_value(profile.home_region or "")
+
+    def new_profile() -> None:
+        editing["id"] = None
+        for box in (name, callsign, grid, lat, lon, timezone, region):
+            box.set_value("")
+        units.set_value("km")
+        fill_when_blank(timezone)
 
     def save() -> None:
         try:
@@ -522,8 +530,16 @@ def _station_panel(desk: Desk) -> None:
         timezone = ui.input("Time zone", placeholder="This computer's").mark(
             "profile-timezone"
         )
+    # The form shows the active profile as saved; only a new one gets this computer's
+    # zone (owner, 2026-11-24: a suggested zone looked like the saved one).
+    active = desk.profiles.get_active()
+    if active is not None:
+        load(active)
+    else:
         fill_when_blank(timezone)
-    ui.button("Save station", on_click=save)
+    with ui.row().classes("gap-2"):
+        ui.button("Save station", on_click=save)
+        ui.button("New profile", on_click=new_profile).props("flat")
 
 
 def _bands_panel(desk: Desk) -> None:
