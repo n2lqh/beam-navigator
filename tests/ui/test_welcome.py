@@ -196,3 +196,14 @@ async def test_time_zone_starts_as_this_computers(user: User, desk: Desk) -> Non
     )
     await open_app(user, desk)
     await eventually(lambda: element(user, "welcome-timezone").value == "America/Chicago")
+
+
+async def test_time_zone_is_a_list(user: User, desk: Desk) -> None:
+    # owner, 2026-11-24: "no one is going to know to type America/New_York"
+    from nicegui import ui
+
+    await open_app(user, desk)
+    zone = element(user, "welcome-timezone")
+    assert isinstance(zone, ui.select)
+    assert zone.options[""] == "This computer's time zone"
+    assert "America/New_York" in zone.options

@@ -116,7 +116,7 @@ async def test_add_station_profile(user: User, desk: Desk, conn: sqlite3.Connect
     await open_tab(user, desk, "Station")
     user.find(marker="profile-name").type("Home")
     user.find(marker="profile-grid").type("FM29pt")
-    user.find(marker="profile-timezone").type("America/New_York")
+    element(user, "profile-timezone").set_value("America/New_York")
     user.find("Save station").click()
     await user.should_see("Activate")
     user.find("Activate").click()
@@ -553,7 +553,7 @@ async def test_station_tab_edits_the_active_profile_in_place(
     add_profile(conn)
     await open_tab(user, desk, "Station")
     timezone = element(user, "profile-timezone")
-    assert isinstance(timezone, ui.input)
+    assert isinstance(timezone, ui.select)
     timezone.set_value("America/New_York")
     user.find("Save station").click()
     await user.should_see("Home · FM29pt · km · America/New_York")
@@ -621,3 +621,71 @@ async def test_rotator_edit_names_the_rotator_on_the_form(
     user.find(marker=f"edit-{rotator}").click()
     await user.should_see("Editing VHF")
     assert element(user, "rotator-name").value == "VHF"
+
+
+# Station time zone: a list, and from QRZ (owner, 2026-11-24) ---------------------------
+
+
+async def open_station_with_qrz(user: User, desk: Desk, replies: list[bytes]) -> None:
+    from beam_navigator.qrz_client import QrzClient
+
+    register_pages(lambda: desk, QrzClient(transport=ReplayQrz(replies)))
+    await user.open("/settings")
+    user.find("Station").click()
+
+
+async def test_station_time_zone_is_a_list(user: User, desk: Desk) -> None:
+    # owner: "no one is going to know to type America/New_York"
+    await open_tab(user, desk, "Station")
+    zone = element(user, "profile-timezone")
+    assert isinstance(zone, ui.select)
+    assert zone.options[""] == "This computer's time zone"
+    assert "America/New_York" in zone.options and "Pacific/Honolulu" in zone.options
+
+
+async def test_time_zone_from_qrz_button(
+    user: User, desk: Desk, conn: sqlite3.Connection, qrz_examples: list[bytes],
+    memory_keyring: Any,
+) -> None:  # fmt: skip
+    from beam_navigator.qrz_login import save_login
+
+    save_login("xx1xxx", "pw-123")
+    add_profile(conn)
+    await open_station_with_qrz(user, desk, [qrz_examples[0], qrz_examples[1]])
+    element(user, "profile-callsign").set_value("AA7BQ")
+    user.find(marker="profile-zone-qrz").click()
+    await eventually(lambda: element(user, "profile-timezone").value == "America/Phoenix")
+    await user.should_see("Time zone from QRZ: America/Phoenix. Press Save station to keep it.")
+    [profile] = ProfileRepository(conn).list()
+    assert profile.timezone == "UTC"  # nothing saved until Save station
+
+
+async def test_new_profile_takes_its_zone_from_qrz(
+    user: User, desk: Desk, qrz_examples: list[bytes], memory_keyring: Any
+) -> None:
+    from beam_navigator.qrz_login import save_login
+
+    save_login("xx1xxx", "pw-123")
+    browser_zone(user, "America/Chicago")
+    await open_station_with_qrz(user, desk, [qrz_examples[0], qrz_examples[1]])
+    await eventually(lambda: element(user, "profile-timezone").value == "America/Chicago")
+    element(user, "profile-callsign").set_value("AA7BQ")
+    user.find(marker="profile-callsign").trigger("blur")
+    await eventually(lambda: element(user, "profile-timezone").value == "America/Phoenix")
+
+
+async def test_qrz_never_replaces_a_zone_you_picked(
+    user: User, desk: Desk, qrz_examples: list[bytes], memory_keyring: Any
+) -> None:
+    from beam_navigator.qrz_login import save_login
+
+    save_login("xx1xxx", "pw-123")
+    await open_station_with_qrz(user, desk, [qrz_examples[0], qrz_examples[1]])
+    zone = element(user, "profile-timezone")
+    # The operator's pick: the browser's event, which NiceGUI files as update:modelValue.
+    user.find(marker="profile-timezone").trigger("update:modelValue", {"value": 0})
+    zone.set_value("America/New_York")
+    element(user, "profile-callsign").set_value("AA7BQ")
+    user.find(marker="profile-callsign").trigger("blur")
+    await asyncio.sleep(0.2)
+    assert zone.value == "America/New_York"

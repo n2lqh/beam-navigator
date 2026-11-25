@@ -101,7 +101,7 @@ The Windows program and `beamnav-ui` use the same folder, so they see the same d
 
 Until a station is active, opening Beam Navigator shows **Welcome to Beam Navigator**, in three steps.
 
-1. **Your station.** Enter your callsign (optional), home grid, units (km or mi) and time zone (for net times, for example `America/New_York`). Press **Next**. If you already have saved stations, they are listed under **Use a saved station**; press **Use** on one instead. If the form was filled from a saved station it says **Editing** and the station's name, with **New station instead** to enter a different one. Moving to a new computer? Use **Restore a backup instead** (see Backup and restore).
+1. **Your station.** Enter your callsign (optional), home grid, units (km or mi) and time zone (for net times). **Time zone** is a list: type a few letters, such as `New_York` or `Chicago`, to find yours; it starts on this computer's zone. Press **Next**. If you already have saved stations, they are listed under **Use a saved station**; press **Use** on one instead. If the form was filled from a saved station it says **Editing** and the station's name, with **New station instead** to enter a different one. Moving to a new computer? Use **Restore a backup instead** (see Backup and restore).
 2. **Example nets.** Beam Navigator offers example nets from a published Pack Rats schedule. They are marked **Example — unverified** until you check them. Choose **Add examples** or **No thanks**. They include past rosters, so their stations are known from the start.
 3. **Next steps.** Links to set up a rotator, add your QRZ login and change keyboard shortcuts. Press **Finish**.
 
@@ -218,6 +218,8 @@ On Windows, the first time Beam Navigator listens for PstRotator's replies, Wind
 QRZ lookups are optional; everything else works without them. They need a QRZ.com login with an **XML Data subscription**. Enter your username and password in Settings → QRZ and press **Save**. Your login is kept in your computer's credential store (Windows Credential Manager, macOS Keychain or the Linux keyring), never in Beam Navigator's files or backups. **Test login** checks it; **Clear** removes it.
 
 With **Look up calls automatically when nothing is saved for them** on, a callsign with no saved grid is looked up when you enter it. QRZ only fills blanks: it never overwrites a grid from a roster or one you typed. On screen, QRZ details are marked as from QRZ; once you save the station or log the check-in, they are kept like your other station details. One exception: a 4-character grid such as `FM29` covers a square about 100 miles wide, so when QRZ has an exact grid inside that same square, QRZ's grid replaces it.
+
+**Time zone from QRZ** (Settings → Station) fills in the time zone QRZ gives your callsign; press **Save station** to keep it. A new station profile does this by itself when you enter the callsign, unless you have already picked a zone. QRZ only names time zones for US calls; elsewhere, pick yours from the list.
 
 **Get exact grids from QRZ** (Settings → QRZ) does the same for every saved station that has only a 4-character grid or none. The button shows how many there are. It uses QRZ answers already saved and asks QRZ only for the rest, one call at a time, and only when you press it. A grid changes only when QRZ's grid lies inside the saved square; stations QRZ puts in a different square are listed for you to check, and nothing about them changes.
 

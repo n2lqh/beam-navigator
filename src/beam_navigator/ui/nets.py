@@ -3,7 +3,6 @@ rotator command (invariant 2): choosing a preferred rotator only records it."""
 
 from collections.abc import Callable
 from datetime import UTC, date, datetime
-from zoneinfo import available_timezones
 
 from nicegui import events, run, ui
 
@@ -19,6 +18,7 @@ from beam_navigator.core.schedule import WEEKDAYS
 from beam_navigator.nets import NetBook, NetForm
 from beam_navigator.qrz_client import NO_LOGIN, NOT_FOUND, QrzClient, QrzError
 from beam_navigator.qrz_login import NO_STORE
+from beam_navigator.ui.browser_zone import ZONES
 
 WEEKDAY_OPTIONS = {number: name.title() for number, name in enumerate(WEEKDAYS)}
 # A clicked button keeps focus; drop it so page hotkeys keep working (as on the live screen).
@@ -38,7 +38,6 @@ def _export(nets: list[Net]) -> None:
     ui.download.content(write_beamnet(nets), beamnet_filename(nets, date.today()))
 
 
-ZONES = sorted(z for z in available_timezones() if "/" in z or z == "UTC")  # no "Factory"
 
 
 def net_form_dialog(

@@ -7,7 +7,7 @@ from nicegui import ui
 
 from beam_navigator.desk import Desk, WelcomeDraft
 from beam_navigator.nets import NetBook
-from beam_navigator.ui.browser_zone import fill_when_blank
+from beam_navigator.ui.browser_zone import fill_when_blank, zone_options
 from beam_navigator.ui.nets import EXAMPLE_OFFER
 
 STATION, EXAMPLES, NEXT = "Your station", "Example nets", "Next steps"
@@ -97,11 +97,10 @@ def welcome_page(desk: Desk, book: NetBook) -> None:
                     units = ui.select(["km", "mi"], value=draft.units, label="Units").mark(
                         "welcome-units"
                     )
-                    timezone = ui.input(
-                        "Time zone", value=draft.timezone,
-                    ).props('hint="For net times; blank uses this PC"').mark(
-                        "welcome-timezone"
-                    )  # fmt: skip
+                    timezone = ui.select(
+                        zone_options(draft.timezone), value=draft.timezone or "",
+                        label="Time zone", with_input=True,
+                    ).props('hint="For net times"').mark("welcome-timezone")  # fmt: skip
                     fill_when_blank(timezone)
                 error = ui.label("").classes("text-negative").mark("welcome-error")
                 with ui.stepper_navigation():

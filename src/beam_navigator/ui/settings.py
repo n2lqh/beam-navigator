@@ -12,6 +12,7 @@ from nicegui import events, run, ui
 
 from beam_navigator import about
 from beam_navigator.backup import BackupError, checked_backup
+from beam_navigator.core.callsign import is_callsign, normalize_callsign
 from beam_navigator.core.keymap import ACTIONS, Chord, label
 from beam_navigator.core.models import LatLon, OperatorProfile, RotatorProfile
 from beam_navigator.core.targets import AliasTarget, TargetError
@@ -21,7 +22,7 @@ from beam_navigator.qrz_client import NON_SUBSCRIBER, NOT_FOUND, QrzClient, QrzE
 from beam_navigator.qrz_login import clear_login, save_login, saved_username
 from beam_navigator.rotators.travel import PRESETS
 from beam_navigator.store.repositories import RotatorNotTested
-from beam_navigator.ui.browser_zone import fill_when_blank
+from beam_navigator.ui.browser_zone import fill_when_blank, zone_options
 
 LIVE_LABEL = "Live: Rotate turns the real antenna"
 SIMULATION_LABEL = "Simulation"
@@ -123,7 +124,7 @@ def settings_page(
         first = data_tab if restored is not None else by_label.get(tab or "", station_tab)
         with ui.tab_panels(tabs, value=first).classes("w-full"):
             with ui.tab_panel(station_tab):
-                _station_panel(desk)
+                _station_panel(desk, qrz)
             with ui.tab_panel(bands_tab):
                 _bands_panel(desk)
             with ui.tab_panel(aliases_tab):
@@ -503,8 +504,10 @@ def _exact_grids(desk: Desk, qrz: QrzClient) -> None:
     result.move(target_index=-1)
 
 
-def _station_panel(desk: Desk) -> None:
+def _station_panel(desk: Desk, qrz: QrzClient | None = None) -> None:
     editing: dict[str, int | None] = {"id": None}
+    # True once the operator picks a zone: QRZ's never replaces it (owner, 2026-11-24).
+    picked = {"zone": False}
 
     @ui.refreshable
     def profile_list() -> None:
@@ -531,15 +534,55 @@ def _station_panel(desk: Desk) -> None:
         lat.set_value("" if profile.latlon is None else f"{profile.latlon.lat:g}")
         lon.set_value("" if profile.latlon is None else f"{profile.latlon.lon:g}")
         units.set_value(profile.units)
-        timezone.set_value(profile.timezone)
+        timezone.set_options(zone_options(profile.timezone), value=profile.timezone or "")
         region.set_value(profile.home_region or "")
+        picked["zone"] = False
+        zone_note.set_text("")
 
     def new_profile() -> None:
         editing["id"] = None
         for box in (name, callsign, grid, lat, lon, timezone, region):
             box.set_value("")
         units.set_value("km")
+        picked["zone"] = False
+        zone_note.set_text("")
         fill_when_blank(timezone)
+
+    async def zone_from_qrz(auto: bool = False) -> None:
+        """The zone QRZ gives this callsign (US calls only); never saved until Save station.
+        auto: a new profile's callsign was entered; it stays quiet and never replaces a
+        zone the operator picked."""
+        if qrz is None:
+            return
+        call = normalize_callsign(callsign.value or "")
+        if not is_callsign(call):
+            if not auto:
+                zone_note.set_text("Type your callsign first.")
+            return
+        try:
+            record, notice = await run.io_bound(qrz.lookup, call)
+        except QrzError as exc:
+            if not auto:
+                zone_note.set_text(str(exc))
+            return
+        desk.qrz_store(record, notice)
+        if record.zone is None:
+            if not auto:
+                zone_note.set_text(
+                    f"QRZ gives no US time zone for {call}; pick yours from the list."
+                )
+            return
+        if auto and (editing["id"] is not None or picked["zone"]):
+            return
+        timezone.set_value(record.zone)
+        zone_note.set_text(f"Time zone from QRZ: {record.zone}. Press Save station to keep it.")
+
+    async def callsign_entered() -> None:
+        if (
+            editing["id"] is None and not picked["zone"] and qrz is not None
+            and desk.settings.get(QRZ_AUTO) != "off"
+        ):  # fmt: skip
+            await zone_from_qrz(auto=True)
 
     def save() -> None:
         try:
@@ -580,9 +623,17 @@ def _station_panel(desk: Desk) -> None:
         lat = ui.input("Exact latitude (optional)").mark("profile-lat")
         lon = ui.input("Exact longitude (optional)").mark("profile-lon")
         units = ui.select(["km", "mi"], value="km", label="Units").mark("profile-units")
-        timezone = ui.input("Time zone", placeholder="This computer's").mark(
-            "profile-timezone"
-        )
+        timezone = ui.select(
+            zone_options(None), value="", label="Time zone", with_input=True
+        ).mark("profile-timezone")
+    timezone.on("update:model-value", lambda: picked.__setitem__("zone", True))
+    callsign.on("blur", callsign_entered)
+    with ui.row().classes("items-center gap-2"):
+        if qrz is not None:
+            ui.button("Time zone from QRZ", on_click=lambda: zone_from_qrz()).props(
+                "flat"
+            ).mark("profile-zone-qrz")
+        zone_note = ui.label("").classes("text-grey").mark("profile-zone-note")
     # The form shows the active profile as saved; only a new one gets this computer's
     # zone (owner, 2026-11-24: a suggested zone looked like the saved one).
     active = desk.profiles.get_active()
