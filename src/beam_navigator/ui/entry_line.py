@@ -72,6 +72,9 @@ class _State:
     typed: int = 0  # callsign edits so far; a pause lookup runs only if none came after it
 
 
+CLOSED = "This session is closed. Press Reopen to log."
+
+
 class EntryLine:
     """Build it, then place fields() and (with QRZ) qrz_button() where the page wants them.
 
@@ -135,8 +138,10 @@ class EntryLine:
 
     def set_enabled(self, on: bool) -> None:
         self.state.enabled = on
-        for box in self.inputs.values():
-            box.set_enabled(on)
+        for name, box in self.inputs.items():
+            # A closed session's I-hear box still points at a call or grid (spec 4.4;
+            # owner, 2026-11-24); only logging is off.
+            box.set_enabled(on or (self.heard and name == "callsign"))
 
     # Entry line --------------------------------------------------------------------------
 
@@ -380,6 +385,8 @@ class EntryLine:
     def start_log(self) -> None:
         state = self.state
         if not state.enabled:
+            if self.callsign:
+                self.message.set_text(CLOSED)
             return
         call = self.callsign
         if not call:

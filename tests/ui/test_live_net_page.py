@@ -576,7 +576,9 @@ async def test_closed_session_read_only_rotate_works(
     NetRepository(conn).close_session(w2kv, "")
     await open_net(user, desk, w2kv)
     await user.should_see(marker="closed-badge")
-    assert not entry(user, "callsign").enabled
+    # The call-or-grid box still points (spec 4.4; owner, 2026-11-24); logging is off.
+    assert entry(user, "callsign").enabled
+    assert not entry(user, "name").enabled
     first = NetRepository(conn).checkins(w2kv)[0]
     [heard] = user.find(marker=f"heard-{first.id}").elements
     assert not heard.enabled
@@ -587,6 +589,22 @@ async def test_closed_session_read_only_rotate_works(
     await user.should_not_see(marker="closed-badge")
     assert entry(user, "callsign").enabled
     assert NetRepository(conn).get_session(w2kv).status == "active"
+
+
+async def test_closed_session_box_points_but_never_logs(
+    user: User, desk: Desk, conn: sqlite3.Connection, w2kv: int, sim: SimulationAdapter
+) -> None:  # owner, 2026-11-24: the I-hear box "will not accept input" on a closed net
+    NetRepository(conn).close_session(w2kv, "")
+    before = len(NetRepository(conn).checkins(w2kv))
+    await open_net(user, desk, w2kv)
+    user.find(marker="entry-callsign").type("FN20")
+    press_enter(user, "callsign")
+    await user.should_see("Rotate VHF to 342")
+    entry(user, "callsign").set_value("W1AW")
+    press_enter(user, "callsign")
+    await user.should_see("This session is closed. Press Reopen to log.")
+    assert len(NetRepository(conn).checkins(w2kv)) == before
+    assert sim.commands == []
 
 
 async def test_aim_unresolved_clears_typed_target(

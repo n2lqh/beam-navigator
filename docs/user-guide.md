@@ -181,7 +181,7 @@ Open a session to follow the net. The **Beam** panel is on the left (at the top 
 - Mark each station **Heard**, **Weak**, **Not heard** or **Via relay**. These are private to you. **Remove (typo)** takes a mistaken check-in off tonight's list after asking; a closed session can't be changed.
 - **Tonight** lists the stations in this session; sort it by **Check-in order**, **Callsign**, **Direction** or **Distance**.
 - **Regulars not heard yet** lists everyone who has checked in to this net before, with bearing, distance, attendance and last check-in. Sort by **Last check-in**, **Callsign**, **Grid** or **Direction**. Click a regular to make them the Target; press **Heard** to add them to tonight.
-- **Close my session…** when the net ends. Add **Notes for next time** ("K3WGR weak from 40°, try 30°") and they appear as **Last time** at the top of the next session of this net, on both screens. A closed session is read-only, but you can still aim and rotate; **Reopen** makes it editable again. Closing notes are private: they are never exported.
+- **Close my session…** when the net ends. Add **Notes for next time** ("K3WGR weak from 40°, try 30°") and they appear as **Last time** at the top of the next session of this net, on both screens. A closed session is read-only, but you can still type a call or grid in the first box to aim, and rotate; pressing Enter on a call there says to press **Reopen**, which makes the session editable again. Closing notes are private: they are never exported.
 
 ## Running a net (net control)
 
