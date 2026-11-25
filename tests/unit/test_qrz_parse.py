@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from beam_navigator.core.qrz import MAX_REPLY, Precision, page_url, parse_response
+from beam_navigator.core.qrz import MAX_REPLY, Precision, page_url, parse_response, us_zone
 
 
 def test_login_example(qrz_examples: list[bytes]) -> None:
@@ -108,3 +108,29 @@ def test_page_url() -> None:  # owner, 2026-10-29: Look up on QRZ opens the QRZ.
     assert page_url(" k2wb ") == "https://www.qrz.com/db/K2WB"
     assert page_url("FN20ok") is None and page_url("") is None
     assert page_url("K1X/P") == "https://www.qrz.com/db/K1X%2FP"
+
+
+def test_callsign_example_time_zone(qrz_examples: list[bytes]) -> None:
+    # AA7BQ in the spec: TimeZone Mountain, DST N, so Arizona time (owner, 2026-11-24).
+    record = parse_response(qrz_examples[1]).record
+    assert record is not None and record.zone == "America/Phoenix"
+
+
+@pytest.mark.parametrize(
+    ("name", "dst", "zone"),
+    [
+        ("Eastern", "Y", "America/New_York"),
+        ("eastern", None, "America/New_York"),
+        ("Central", "Y", "America/Chicago"),
+        ("Mountain", "Y", "America/Denver"),
+        ("Mountain", "N", "America/Phoenix"),
+        ("Pacific", "Y", "America/Los_Angeles"),
+        ("Alaska", "Y", "America/Anchorage"),
+        ("Hawaii", "N", "Pacific/Honolulu"),
+        ("Eastern", "N", None),  # unusual: never guessed
+        ("GMT+1", None, None),
+        (None, "Y", None),
+    ],
+)
+def test_us_zone(name: str | None, dst: str | None, zone: str | None) -> None:
+    assert us_zone(name, dst) == zone

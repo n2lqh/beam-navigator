@@ -7,7 +7,7 @@ are capped at MAX_REPLY bytes.
 
 import math
 import xml.etree.ElementTree as ElementTree
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 from urllib.parse import quote
 
@@ -46,6 +46,8 @@ class QrzRecord:
     lat: float | None
     lon: float | None
     geoloc: str | None
+    # IANA zone from QRZ's US TimeZone name: from a fresh answer only, never stored.
+    zone: str | None = field(default=None, compare=False)
 
     @property
     def precision(self) -> Precision:
@@ -91,6 +93,31 @@ def _real_position(lat: float | None, lon: float | None) -> bool:
     )  # fmt: skip
 
 
+# QRZ's TimeZone is a US name (spec 1.34: "Time Zone (USA)"); DST says whether daylight
+# time is observed. Outside the US there is only a UTC offset, which can't tell zones
+# apart, so nothing is guessed (owner, 2026-11-24).
+_US_ZONES: dict[tuple[str, bool], str] = {
+    ("eastern", True): "America/New_York",
+    ("central", True): "America/Chicago",
+    ("mountain", True): "America/Denver",
+    ("mountain", False): "America/Phoenix",
+    ("pacific", True): "America/Los_Angeles",
+    ("alaska", True): "America/Anchorage",
+    ("hawaii", False): "Pacific/Honolulu",
+}
+_NO_DST = {"hawaii"}
+
+
+def us_zone(name: str | None, dst: str | None) -> str | None:
+    """The IANA zone for QRZ's US TimeZone name and DST flag, or None."""
+    key = (name or "").strip().lower().removesuffix(" time").strip()
+    if not key:
+        return None
+    flag = (dst or "").strip().upper()
+    observes = key not in _NO_DST if not flag else flag == "Y"
+    return _US_ZONES.get((key, observes))
+
+
 def _record(fields: dict[str, str]) -> QrzRecord | None:
     call = fields.get("call")
     if not call:
@@ -113,6 +140,7 @@ def _record(fields: dict[str, str]) -> QrzRecord | None:
         lat=lat,
         lon=lon,
         geoloc=fields.get("geoloc"),
+        zone=us_zone(fields.get("TimeZone"), fields.get("DST")),
     )
 
 
