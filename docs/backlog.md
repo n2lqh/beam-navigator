@@ -6,6 +6,10 @@ Each item lists what it is, why it matters, and what has to exist first.
 
 ---
 
+## Next revision (owner requests)
+
+**After Add ticked stations, clear the comparison** (owner, 2026-11-24). The Import page should drop the three Compare groups once the stations are added and show only "Added N stations" with Open live net.
+
 ## B1. Weak-signal operating aids
 
 **B1.1 Sweep-order prediction.** Learn each controller's usual order of announced sectors from session history. Show "Likely next: E" and "Your sector is usually 6th." Only after 3+ sessions with that controller; labeled with its basis. *Needs:* announced sectors stored per session (already captured in v2).
