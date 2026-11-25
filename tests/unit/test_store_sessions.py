@@ -158,3 +158,18 @@ def test_replace_refuses_an_import_holding_your_check_ins(nets: NetRepository) -
             replace_session_id=imported.id,
         )  # fmt: skip
     assert "W1AW" in [c.callsign for c in nets.checkins(imported.id)]
+
+
+def test_session_on_prefers_your_own_session_over_an_import(nets: NetRepository) -> None:
+    # Owner's 144 MHz 2026-11-23: their closed #25 and an older-rule import #28.
+    net_id = two_metre_net(nets)
+    mine = nets.start_session(net_id, "2026-11-23")
+    nets.close_session(mine.id, "")
+    nets._conn.execute(  # an import made before one session per night (owner, 2026-11-24)
+        "INSERT INTO session (net_id, date, status, raw_text, created_at)"
+        " VALUES (?, '2026-11-23', 'imported', 'x', '2026-11-24T00:00:00+00:00')",
+        (net_id,),
+    )
+    found = nets.session_on(net_id, "2026-11-23")
+    assert found is not None and found.id == mine.id
+    assert nets.start_session(net_id, "2026-11-23").id == mine.id

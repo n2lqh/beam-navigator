@@ -559,9 +559,11 @@ class NetRepository:
 
     def session_on(self, net_id: int, date: str) -> Session | None:
         """The net's session on that date, of any status: a night has one session (owner,
-        2026-11-24). Older data may hold more; the newest is the one used."""
+        2026-11-24). Older data may hold more: the operator's own session wins over an
+        import, then the newest."""
         row = self._conn.execute(
-            "SELECT id FROM session WHERE net_id = ? AND date = ? ORDER BY id DESC LIMIT 1",
+            "SELECT id FROM session WHERE net_id = ? AND date = ?"
+            " ORDER BY status = 'imported', id DESC LIMIT 1",
             (net_id, date),
         ).fetchone()
         return None if row is None else self.get_session(row["id"])
