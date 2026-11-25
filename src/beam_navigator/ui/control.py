@@ -110,7 +110,8 @@ def control_page(control: NetControl, session_id: int, qrz: QrzClient | None = N
             for row in control.rows(session_id):
                 _session_row(control, row)
 
-        with ui.column().classes("w-full gap-0 overflow-x-auto"):
+        # p-1: room for the active box's outside ring in a scrolling column.
+        with ui.column().classes("w-full gap-0 overflow-x-auto p-1"):
             table()
         with ui.row().classes("items-center gap-2"):
             include_report = ui.checkbox("Include report", value=True).mark("export-report")

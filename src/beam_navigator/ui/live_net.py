@@ -502,8 +502,9 @@ def live_net_page(control: NetControl, session_id: int, qrz: QrzClient | None = 
                                 ui.label("")
                 banner = ui.label(PRESS_DIRECTION).mark("banner")
 
-            # Everything you pick from.
-            with ui.column().classes("gap-2 grow basis-0 min-w-0 w-full overflow-x-auto"):
+            # Everything you pick from. p-1: a scrolling column clips the active box's outside
+            # ring (owner, 2026-11-24: the Call or grid box had no left border).
+            with ui.column().classes("gap-2 grow basis-0 min-w-0 w-full overflow-x-auto p-1"):
                 @ui.refreshable
                 def lists() -> None:
                     view = live.view(session_id)
