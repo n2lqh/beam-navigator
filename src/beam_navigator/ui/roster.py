@@ -231,7 +231,11 @@ def import_page(
                 await details_from_qrz(qrz, result)
             if compared["result"] is not result:
                 return  # parsed again or another night picked meanwhile
-            added = compare.add(result)
+            try:
+                added = compare.add(result)
+            except ValueError as exc:
+                _error(exc)
+                return
             current = state["review"]
             if current is not None:
                 compared["result"] = compare.compare(result.session_id, current)

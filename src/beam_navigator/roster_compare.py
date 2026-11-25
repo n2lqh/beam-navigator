@@ -10,6 +10,7 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from beam_navigator.core.callsign import base_callsign, is_callsign, normalize_callsign
+from beam_navigator.core.maidenhead import is_grid
 from beam_navigator.core.models import CheckIn
 from beam_navigator.desk import Desk
 from beam_navigator.net_control import Entry, NetControl
@@ -116,7 +117,11 @@ class RosterCompare:
                 looked_up)  # fmt: skip
 
     def add(self, comparison: Comparison) -> list[CheckIn]:
-        stations = [self._filled(row) for row in comparison.missing if row.add]
+        ticked = [row for row in comparison.missing if row.add]
+        for row in ticked:  # the same check Save makes (final review, 2026-11-24)
+            if row.grid and not is_grid(row.grid):
+                raise ValueError(f"{row.callsign}: {row.grid!r} is not a grid square.")
+        stations = [self._filled(row) for row in ticked]
         if not stations:
             return []
         return self._nets.add_from_list(comparison.session_id, stations, comparison.raw_text)

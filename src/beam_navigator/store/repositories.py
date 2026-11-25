@@ -480,6 +480,18 @@ class NetRepository:
                     raise ValueError(
                         f"Session {replace_session_id} is not an import of this net on {date}."
                     )
+                # Rows the operator logged or marked have a time or a heard state; an
+                # import's rows have neither. Those are never deleted (invariant 9).
+                own = self._conn.execute(
+                    "SELECT 1 FROM checkin WHERE session_id = ? AND (logged_at IS NOT NULL"
+                    " OR heard_state IS NOT NULL) LIMIT 1",
+                    (replace_session_id,),
+                ).fetchone()
+                if own is not None:
+                    raise ValueError(
+                        "This night's session holds your own check-ins, so it can't be"
+                        " replaced. Use Compare with my session instead."
+                    )
                 self._conn.execute(
                     "DELETE FROM checkin WHERE session_id = ?", (replace_session_id,)
                 )
@@ -558,6 +570,14 @@ class NetRepository:
         """Opens the night's session when the net already has one, else starts it."""
         _check_date(date)
         existing = self.session_on(net_id, date)
+        if existing is not None and existing.status == "imported":
+            # Logging into an import makes it the operator's own, so Replace can never
+            # delete what they logged there (final review, 2026-11-24).
+            with self._conn:
+                self._conn.execute(
+                    "UPDATE session SET status = 'active' WHERE id = ?", (existing.id,)
+                )
+            return self.get_session(existing.id)
         if existing is not None:
             return existing
         net = self.get_net(net_id)

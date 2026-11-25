@@ -137,3 +137,24 @@ def test_import_refuses_a_night_that_has_a_session(nets: NetRepository) -> None:
     nets.start_session(net_id, "2026-10-26")
     with pytest.raises(ValueError, match="already has a session on 2026-10-26"):
         nets.import_roster(net_id, "2026-10-26", W2KV_TEXT, parse_roster(W2KV_TEXT))
+
+
+def test_start_session_on_an_imported_night_makes_it_yours(nets: NetRepository) -> None:
+    # Final review: logging into an import left it "imported", so Replace could delete it.
+    net_id = two_metre_net(nets)
+    imported = nets.import_roster(net_id, "2026-10-26", W2KV_TEXT, parse_roster(W2KV_TEXT))
+    started = nets.start_session(net_id, "2026-10-26")
+    assert started.id == imported.id and started.status == "active"
+    assert len(nets.checkins(started.id)) == 17
+
+
+def test_replace_refuses_an_import_holding_your_check_ins(nets: NetRepository) -> None:
+    net_id = two_metre_net(nets)
+    imported = nets.import_roster(net_id, "2026-10-26", W2KV_TEXT, parse_roster(W2KV_TEXT))
+    nets.add_checkin(imported.id, "W1AW")  # logged from the live net screen
+    with pytest.raises(ValueError, match="your own check-ins"):
+        nets.import_roster(
+            net_id, "2026-10-26", W2KV_TEXT, parse_roster(W2KV_TEXT),
+            replace_session_id=imported.id,
+        )  # fmt: skip
+    assert "W1AW" in [c.callsign for c in nets.checkins(imported.id)]

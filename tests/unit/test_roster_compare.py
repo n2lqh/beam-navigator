@@ -193,3 +193,13 @@ def test_excluded_rows_are_not_compared(
     result = compare.compare(session_id, review)
     calls = [m.callsign for m in result.missing] + [b.callsign for b in result.both]
     assert "K4SO" not in calls
+
+
+def test_add_refuses_a_bad_grid(
+    compare: RosterCompare, nets: NetRepository, session_id: int, review: Review
+) -> None:  # final review: Save checks grids, so Add must too
+    _k4so(review).grid = "ZZ99"
+    result = compare.compare(session_id, review)
+    with pytest.raises(ValueError, match="'ZZ99' is not a grid square"):
+        compare.add(result)
+    assert len(nets.checkins(session_id)) == 2
